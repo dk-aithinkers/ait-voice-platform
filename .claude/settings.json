@@ -20,7 +20,7 @@
     "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/aidlc-statusline.ts\""
   },
   "env": {
-    "AWS_AIDLC_DEFAULT_SCOPE": "classic"
+    "AWS_AIDLC_DEFAULT_SCOPE": "mvp"
   },
   "model": "opus[1m]",
   "effortLevel": "xhigh",
