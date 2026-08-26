@@ -2086,3 +2086,610 @@
 **Agent**: aidlc-design-agent
 
 ---
+
+## Artifact Created
+**Timestamp**: 2026-08-26T14:38:17Z
+**Event**: ARTIFACT_CREATED
+**Tool**: Write
+**File**: <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/rough-mockups-questions.md
+**Context**: ideation > rough-mockups > rough-mockups-questions.md
+
+---
+
+## Decision Recorded
+**Timestamp**: 2026-08-26T14:38:22Z
+**Event**: DECISION_RECORDED
+**Stage**: rough-mockups
+**Decision**: How would you like to answer the rough mockups questions?
+**Options**: Guide Me,Edit File,Chat
+
+---
+
+## Error Logged
+**Timestamp**: 2026-08-26T14:38:22Z
+**Event**: ERROR_LOGGED
+**Tool**: aidlc-log
+**Command**: aidlc-log answer --stage rough-mockups --questions-file aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/rough-mockups-questions.md --details Guide Me
+**Error**: Refusing to record this answer: a real human has not acted at this checkpoint this turn. Type your answer in the session (which records a human turn) before logging it.
+
+---
+
+## Human Turn
+**Timestamp**: 2026-08-26T14:38:43Z
+**Event**: HUMAN_TURN
+
+---
+
+## Question Answered
+**Timestamp**: 2026-08-26T14:38:48Z
+**Event**: QUESTION_ANSWERED
+**Stage**: rough-mockups
+**Details**: Guide Me
+
+---
+
+## Human Turn
+**Timestamp**: 2026-08-26T14:39:53Z
+**Event**: HUMAN_TURN
+
+---
+
+## Human Turn
+**Timestamp**: 2026-08-26T14:41:10Z
+**Event**: HUMAN_TURN
+
+---
+
+## Decision Recorded
+**Timestamp**: 2026-08-26T14:41:51Z
+**Event**: DECISION_RECORDED
+**Stage**: rough-mockups
+**Decision**: Does this all look correct before I generate the artifacts?
+**Options**: Looks correct,Request changes
+**Checkpoint**: Consolidated Summary Confirmation
+**Questions File**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/rough-mockups-questions.md
+
+---
+
+## Human Turn
+**Timestamp**: 2026-08-26T14:42:11Z
+**Event**: HUMAN_TURN
+
+---
+
+## Summary Confirmation Recorded
+**Timestamp**: 2026-08-26T14:42:16Z
+**Event**: SUMMARY_CONFIRMATION_RECORDED
+**Stage**: rough-mockups
+**Details**: Looks correct
+**Checkpoint**: Consolidated Summary Confirmation
+**Questions File**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/rough-mockups-questions.md
+**Questions SHA-256**: 1895d9f205873d39030d891519cc6a2f0274822f813446657e8c0983b4137bb4
+**Hash Scope**: confirmed-content-v1
+
+---
+
+## Artifact Created
+**Timestamp**: 2026-08-26T14:42:59Z
+**Event**: ARTIFACT_CREATED
+**Tool**: Write
+**File**: <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/user-flow.md
+**Context**: ideation > rough-mockups > user-flow.md
+
+---
+
+## Artifact Created
+**Timestamp**: 2026-08-26T14:44:01Z
+**Event**: ARTIFACT_CREATED
+**Tool**: Write
+**File**: <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/wireframes.md
+**Context**: ideation > rough-mockups > wireframes.md
+
+---
+
+## Review Requested
+**Timestamp**: 2026-08-26T14:44:22Z
+**Event**: REVIEW_REQUESTED
+**Stage**: rough-mockups
+**Reviewer**: aidlc-product-lead-agent
+**Iteration**: 1
+**Artifact Fingerprint**: sha256:a421e59fe41699a5a32fe5cd9fd0e6eda7eb8f0eec328713262361f2eae8323f
+
+---
+
+## Artifact Updated
+**Timestamp**: 2026-08-26T14:46:12Z
+**Event**: ARTIFACT_UPDATED
+**Tool**: Edit
+**File**: <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/wireframes.md
+**Context**: ideation > rough-mockups > wireframes.md
+
+---
+
+## Subagent Completed
+**Timestamp**: 2026-08-26T14:46:22Z
+**Event**: SUBAGENT_COMPLETED
+**Agent Type**: aidlc-product-lead-agent
+**Agent ID**: a1129d3a8a35b65a5
+**Message**: **Reviewer:** aidlc-product-lead-agent\n\n**Verdict: READY** (advisory pass — findings below are decision support for the human at the approval gate, not a blocking loop)\n\nI reviewed `wireframes.md` (PR
+
+---
+
+## Review Requested
+**Timestamp**: 2026-08-26T14:46:38Z
+**Event**: REVIEW_REQUESTED
+**Stage**: rough-mockups
+**Reviewer**: aidlc-product-lead-agent
+**Iteration**: 1
+**Retry**: pending-request
+**Artifact Fingerprint**: sha256:d5c48af29368fcd2663f9273d7a1b67a046ef4d13153f116dc6e26d518e203fe
+
+---
+
+## Review Completed
+**Timestamp**: 2026-08-26T14:46:38Z
+**Event**: REVIEW_COMPLETED
+**Stage**: rough-mockups
+**Reviewer**: aidlc-product-lead-agent
+**Iteration**: 1
+**Verdict**: READY
+**Artifact Fingerprint**: sha256:d5c48af29368fcd2663f9273d7a1b67a046ef4d13153f116dc6e26d518e203fe
+
+---
+
+## Decision Recorded
+**Timestamp**: 2026-08-26T14:46:44Z
+**Event**: DECISION_RECORDED
+**Stage**: rough-mockups
+**Decision**: Anything to keep as a durable practice from this stage?
+**Options**: c3 do not claim an input was applied when it was never supplied,c4 defer to approved artifacts when answers are silent,c5 omit derived metrics with no baseline,Nothing to add
+
+---
+
+## Decision Recorded
+**Timestamp**: 2026-08-26T14:46:54Z
+**Event**: DECISION_RECORDED
+**Stage**: rough-mockups
+**Decision**: Anything to keep as a durable practice from this stage? (corrected candidate ids)
+**Options**: c6 do not claim an input was applied when it was never supplied,c2 defer to approved artifacts when answers are silent,c4 omit derived metrics with no baseline,Nothing to add
+
+---
+
+## Human Turn
+**Timestamp**: 2026-08-26T14:47:31Z
+**Event**: HUMAN_TURN
+
+---
+
+## Human Turn
+**Timestamp**: 2026-08-26T14:47:55Z
+**Event**: HUMAN_TURN
+
+---
+
+## Question Answered
+**Timestamp**: 2026-08-26T14:48:08Z
+**Event**: QUESTION_ANSWERED
+**Stage**: rough-mockups
+**Details**: c6 (broadened) do not claim an input was applied or a requirement met when the artifact does not contain it
+
+---
+
+## Rule Learned
+**Timestamp**: 2026-08-26T14:48:08Z
+**Event**: RULE_LEARNED
+**Stage**: rough-mockups
+**Candidate-ID**: c6
+**Content-Hash**: 81b6c0270c5a59dbbfcb962059eba4e0a407cf19b5e058446bbdfa1d2f2a03c4
+**Destination**: <project-dir>/aidlc/spaces/default/memory/project.md
+**Heading**: ## Mandated
+**Source**: orchestrator
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-08-26T14:48:09Z
+**Event**: SENSOR_FIRED
+**Fire id**: 2638d41b
+**Sensor ID**: required-sections
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/wireframes.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-08-26T14:48:09Z
+**Event**: SENSOR_PASSED
+**Fire id**: 2638d41b
+**Sensor ID**: required-sections
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/wireframes.md
+**Duration ms**: 28
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-08-26T14:48:09Z
+**Event**: SENSOR_FIRED
+**Fire id**: feac989b
+**Sensor ID**: required-sections
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/user-flow.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-08-26T14:48:09Z
+**Event**: SENSOR_PASSED
+**Fire id**: feac989b
+**Sensor ID**: required-sections
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/user-flow.md
+**Duration ms**: 26
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-08-26T14:48:09Z
+**Event**: SENSOR_FIRED
+**Fire id**: afc379c4
+**Sensor ID**: required-sections
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/rough-mockups-questions.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-08-26T14:48:09Z
+**Event**: SENSOR_PASSED
+**Fire id**: afc379c4
+**Sensor ID**: required-sections
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/rough-mockups-questions.md
+**Duration ms**: 27
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-08-26T14:48:09Z
+**Event**: SENSOR_FIRED
+**Fire id**: fc0fa204
+**Sensor ID**: upstream-coverage
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/wireframes.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-08-26T14:48:09Z
+**Event**: SENSOR_PASSED
+**Fire id**: fc0fa204
+**Sensor ID**: upstream-coverage
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/wireframes.md
+**Duration ms**: 33
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-08-26T14:48:09Z
+**Event**: SENSOR_FIRED
+**Fire id**: 2ef49e63
+**Sensor ID**: upstream-coverage
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/user-flow.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-08-26T14:48:09Z
+**Event**: SENSOR_PASSED
+**Fire id**: 2ef49e63
+**Sensor ID**: upstream-coverage
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/user-flow.md
+**Duration ms**: 26
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-08-26T14:48:09Z
+**Event**: SENSOR_FIRED
+**Fire id**: 5573456f
+**Sensor ID**: upstream-coverage
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/rough-mockups-questions.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-08-26T14:48:09Z
+**Event**: SENSOR_PASSED
+**Fire id**: 5573456f
+**Sensor ID**: upstream-coverage
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/rough-mockups-questions.md
+**Duration ms**: 26
+
+---
+
+## Stage Awaiting Approval
+**Timestamp**: 2026-08-26T14:48:09Z
+**Event**: STAGE_AWAITING_APPROVAL
+**Stage**: rough-mockups
+
+---
+
+## Human Turn
+**Timestamp**: 2026-08-26T14:49:21Z
+**Event**: HUMAN_TURN
+
+---
+
+## Gate Rejected
+**Timestamp**: 2026-08-26T14:49:26Z
+**Event**: GATE_REJECTED
+**Stage**: rough-mockups
+**Feedback**: Accessibility notes incomplete on Screens 1a, 2 and 2a: each omits primary landmark regions and a distinct keyboard entry point, which the stage requires per screen. The preamble also claims all screens carry heading level, landmark regions and keyboard entry point, which overstates what the artifact contains.
+
+---
+
+## Stage Revising
+**Timestamp**: 2026-08-26T14:49:26Z
+**Event**: STAGE_REVISING
+**Stage**: rough-mockups
+**Revision count**: 1
+**Feedback**: Accessibility notes incomplete on Screens 1a, 2 and 2a: each omits primary landmark regions and a distinct keyboard entry point, which the stage requires per screen. The preamble also claims all screens carry heading level, landmark regions and keyboard entry point, which overstates what the artifact contains.
+
+---
+
+## Artifact Updated
+**Timestamp**: 2026-08-26T14:49:33Z
+**Event**: ARTIFACT_UPDATED
+**Tool**: Edit
+**File**: <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/wireframes.md
+**Context**: ideation > rough-mockups > wireframes.md
+
+---
+
+## Artifact Updated
+**Timestamp**: 2026-08-26T14:49:57Z
+**Event**: ARTIFACT_UPDATED
+**Tool**: Edit
+**File**: <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/wireframes.md
+**Context**: ideation > rough-mockups > wireframes.md
+
+---
+
+## Error Logged
+**Timestamp**: 2026-08-26T14:50:01Z
+**Event**: ERROR_LOGGED
+**Tool**: aidlc-log
+**Command**: aidlc-log review --stage rough-mockups --reviewer aidlc-product-lead-agent --iteration 2
+**Error**: Refusing REVIEW_REQUESTED for "rough-mockups": review request 2 exceeds this stage's review budget (1). This review runs as a single advisory pass - do not re-invoke the reviewer; quote its findings at the approval gate for the human to triage.
+
+---
+
+## Review Requested
+**Timestamp**: 2026-08-26T14:50:07Z
+**Event**: REVIEW_REQUESTED
+**Stage**: rough-mockups
+**Reviewer**: aidlc-product-lead-agent
+**Iteration**: 1
+**Artifact Fingerprint**: sha256:eff608dd78275faaed763b278e42420bc4f9245e11bccaa22ba790693939e751
+
+---
+
+## Artifact Updated
+**Timestamp**: 2026-08-26T14:51:02Z
+**Event**: ARTIFACT_UPDATED
+**Tool**: Edit
+**File**: <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/wireframes.md
+**Context**: ideation > rough-mockups > wireframes.md
+
+---
+
+## Subagent Completed
+**Timestamp**: 2026-08-26T14:51:11Z
+**Event**: SUBAGENT_COMPLETED
+**Agent Type**: aidlc-product-lead-agent
+**Agent ID**: a556e04c2626468d9
+**Message**: **Reviewer:** aidlc-product-lead-agent\n\n**Verdict: READY**\n\nI re-reviewed the revision to `wireframes.md` against the human's rejection feedback (accessibility notes incomplete on Screens 1a, 2, 2a; p
+
+---
+
+## Review Requested
+**Timestamp**: 2026-08-26T14:51:15Z
+**Event**: REVIEW_REQUESTED
+**Stage**: rough-mockups
+**Reviewer**: aidlc-product-lead-agent
+**Iteration**: 1
+**Retry**: pending-request
+**Artifact Fingerprint**: sha256:b1f4c08a047cb4ca3afa50df41739b8e52e2fc317821ba756fc26c545749e46e
+
+---
+
+## Review Completed
+**Timestamp**: 2026-08-26T14:51:15Z
+**Event**: REVIEW_COMPLETED
+**Stage**: rough-mockups
+**Reviewer**: aidlc-product-lead-agent
+**Iteration**: 1
+**Verdict**: READY
+**Artifact Fingerprint**: sha256:b1f4c08a047cb4ca3afa50df41739b8e52e2fc317821ba756fc26c545749e46e
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-08-26T14:51:15Z
+**Event**: SENSOR_FIRED
+**Fire id**: f1f08059
+**Sensor ID**: required-sections
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/wireframes.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-08-26T14:51:15Z
+**Event**: SENSOR_PASSED
+**Fire id**: f1f08059
+**Sensor ID**: required-sections
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/wireframes.md
+**Duration ms**: 36
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-08-26T14:51:15Z
+**Event**: SENSOR_FIRED
+**Fire id**: 1a3b0860
+**Sensor ID**: required-sections
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/user-flow.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-08-26T14:51:15Z
+**Event**: SENSOR_PASSED
+**Fire id**: 1a3b0860
+**Sensor ID**: required-sections
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/user-flow.md
+**Duration ms**: 53
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-08-26T14:51:15Z
+**Event**: SENSOR_FIRED
+**Fire id**: c5d58438
+**Sensor ID**: required-sections
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/rough-mockups-questions.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-08-26T14:51:16Z
+**Event**: SENSOR_PASSED
+**Fire id**: c5d58438
+**Sensor ID**: required-sections
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/rough-mockups-questions.md
+**Duration ms**: 26
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-08-26T14:51:16Z
+**Event**: SENSOR_FIRED
+**Fire id**: a3bf17cd
+**Sensor ID**: upstream-coverage
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/wireframes.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-08-26T14:51:16Z
+**Event**: SENSOR_PASSED
+**Fire id**: a3bf17cd
+**Sensor ID**: upstream-coverage
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/wireframes.md
+**Duration ms**: 28
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-08-26T14:51:16Z
+**Event**: SENSOR_FIRED
+**Fire id**: 8a0b81db
+**Sensor ID**: upstream-coverage
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/user-flow.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-08-26T14:51:16Z
+**Event**: SENSOR_PASSED
+**Fire id**: 8a0b81db
+**Sensor ID**: upstream-coverage
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/user-flow.md
+**Duration ms**: 28
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-08-26T14:51:16Z
+**Event**: SENSOR_FIRED
+**Fire id**: 0c92574f
+**Sensor ID**: upstream-coverage
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/rough-mockups-questions.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-08-26T14:51:16Z
+**Event**: SENSOR_PASSED
+**Fire id**: 0c92574f
+**Sensor ID**: upstream-coverage
+**Stage slug**: rough-mockups
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/ideation/rough-mockups/rough-mockups-questions.md
+**Duration ms**: 45
+
+---
+
+## Stage Awaiting Approval
+**Timestamp**: 2026-08-26T14:51:16Z
+**Event**: STAGE_AWAITING_APPROVAL
+**Stage**: rough-mockups
+**Details**: Re-entering gate after revision
+
+---
+
+## Human Turn
+**Timestamp**: 2026-08-26T14:52:26Z
+**Event**: HUMAN_TURN
+
+---
+
+## Gate Approved
+**Timestamp**: 2026-08-26T14:52:36Z
+**Event**: GATE_APPROVED
+**Stage**: rough-mockups
+**User Input**: Approve
+
+---
+
+## Stage Completion
+**Timestamp**: 2026-08-26T14:52:36Z
+**Event**: STAGE_COMPLETED
+**Stage**: rough-mockups
+**Validation Basis**: {"graphContract":"sha256:5fba28f1cd240c14897220333a49791025975ed0959b36140f54f85ea567bf03","inputs":[{"artifact":"intent-backlog","contentHash":"sha256:d31ef259e3b59e20ae27e011b4c7bbc305ee509b076882b7af2d89c34fb62096","instanceCount":1,"presentCount":1,"producer":"scope-definition","required":true,"structureHash":"sha256:2d40eb7c78e4b56c2142fcc343f998373215f9903d266f4de6995b130316b4b8"},{"artifact":"intent-statement","contentHash":"sha256:87a6ef7c86b28fb2e6a21756924fb5da9930824fd05061cb422aec5ed0b706fd","instanceCount":1,"presentCount":1,"producer":"intent-capture","required":true,"structureHash":"sha256:51220a3161ae41e5adbc184834421f54bdc037e1a305d5543eff716e246ba35d"},{"artifact":"scope-document","contentHash":"sha256:a2a6a16a092ecdc4ebf9984eb5a30d5be757bb2096d79158960175e225fd491c","instanceCount":1,"presentCount":1,"producer":"scope-definition","required":true,"structureHash":"sha256:2b21db7d727cca7b6063f0f0dcfdeac1c9727f5dc14ae5cb2281a2a431c997ce"}],"outputs":[{"artifact":"rough-mockups-questions","contentHash":"sha256:6a889e354ab4ca9d2882c6a333866ce068b1c3e42d45d6ec4fdc284a168d6c19","instanceCount":1,"presentCount":1,"producer":"rough-mockups","required":true,"structureHash":"sha256:001c5394427df742fa28d035257fe6b6fa7c4a9f22d37e8930ad8a7cbf23c048"},{"artifact":"user-flow","contentHash":"sha256:64183e7cb69f0dd8c002446fbebe2aa9bfbe52cd086a6d298d53168d9bcc9190","instanceCount":1,"presentCount":1,"producer":"rough-mockups","required":true,"structureHash":"sha256:4a1ea86043f5f1f9748e257f964d0214d84843bf657564519676c4b66553180d"},{"artifact":"wireframes","contentHash":"sha256:fc6545caca8b13b63bd7d150055a5d0cfd85c75570e153bd175be1314e37dab6","instanceCount":1,"presentCount":1,"producer":"rough-mockups","required":true,"structureHash":"sha256:76113e28fda85d34d8edbaf5306b6a674535795a44be7056093f147931ddb031"}],"projectType":"greenfield","schema":3}
+**Details**: Stage Rough Mockups approved by gate
+**Tokens In**: 104
+**Tokens Out**: 40717
+**Cache Read**: 25499481
+**Cache Write**: 234265
+**Cost USD**: 14.82
+**By Model**: opus-5=13.80; sonnet-5=1.02
+**By Agent**: main=13.80; aidlc-product-lead-agent=1.02
+**Tokens By Model**: opus-5=76/35.5k/24.4M/71.8k; sonnet-5=28/5.2k/1.1M/162.5k
+**Tokens By Agent**: main=76/35.5k/24.4M/71.8k; aidlc-product-lead-agent=28/5.2k/1.1M/162.5k
+
+---
+
+## Stage Start
+**Timestamp**: 2026-08-26T14:52:36Z
+**Event**: STAGE_STARTED
+**Stage**: approval-handoff
+**Agent**: aidlc-delivery-agent
+
+---
