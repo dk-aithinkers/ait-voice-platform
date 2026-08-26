@@ -161,3 +161,25 @@ Does this all look correct before I generate the artifact?
 - Request changes
 
 [Answer]: Looks correct
+
+## Assumption Confirmation
+
+The two artifacts record the following as assumptions — things that are useful
+to preserve but that no answer establishes as fact:
+
+**From the intent statement:**
+
+1. Numeric targets and measurement windows for the three success metrics are not yet defined, so success is currently directional rather than testable. [assumption]
+2. The regulatory frameworks named in the initial description (US HIPAA, India DPDP) have not been confirmed against a specific deployment jurisdiction or named customer, because no pilot clinic is selected yet. [assumption]
+3. Whether the first deployment targets the US tenant, the India tenant, or both at once is not established. [assumption]
+
+**From the stakeholder map:**
+
+4. The interests of AI Thinkers leadership, clinic practitioners, and patients were not elicited, so those rows remain open. [assumption]
+5. The pilot clinic's authority over scope and priority once selected is not established. [assumption]
+6. With no formal reporting cadence and no named pilot, there is currently no defined channel through which clinic-side feedback reaches the initiative. [assumption]
+
+A. Accept assumptions
+B. Convert to follow-up questions
+
+[Answer]: A. Accept assumptions
