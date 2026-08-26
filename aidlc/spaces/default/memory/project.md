@@ -46,6 +46,7 @@
 
 <!-- Custom scope rules for this project. -->
 
+- ALWAYS record a scope reduction order at the moment scope is set, naming what would be cut first, in what sequence, and what each cut costs. Scope reductions are decided under pressure — a deadline, a capacity squeeze, a blocked dependency — which is the worst moment to reason clearly about which capability carries the least value and the most burden. Writing the order down while the trade-offs are still being examined turns a later cut into a decision against a prepared list rather than an improvisation, and makes the cost of each cut visible to whoever has to approve it. (learned 2026-08-26) <!-- cid:260826-healthcare-receptionist:scope-definition:8012859cfe728829e79633ecc04907627a2b04657634ef39b6643a9aa88bc9f0 -->
 ## Forbidden
 
 <!-- Populated by practices-discovery affirmation gate. -->
