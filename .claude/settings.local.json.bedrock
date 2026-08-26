@@ -1,0 +1,18 @@
+{
+  "_comment": "AWS Bedrock provider override. Copy this file to .claude/settings.local.json (gitignored) to route Claude Code through Bedrock instead of your Anthropic account. Delete that file to go back. See PROVIDERS.md.",
+  "env": {
+    "CLAUDE_CODE_USE_BEDROCK": "1",
+
+    "_comment_AWS_REGION": "Required. Claude Code does NOT read the region from ~/.aws. Change if your Bedrock models live elsewhere.",
+    "AWS_REGION": "us-east-1",
+
+    "_comment_AWS_PROFILE": "Uncomment and set if you authenticate with a named SSO/credential profile. Kept here rather than in settings.json so it never reaches git.",
+    "__AWS_PROFILE": "your-profile-name",
+
+    "_comment_models": "Global Bedrock inference profile IDs. The [1m] suffix selects the 1M-context variant and is stripped before the ID reaches Bedrock. Haiku has no 1M variant.",
+    "ANTHROPIC_DEFAULT_FABLE_MODEL": "global.anthropic.claude-fable-5[1m]",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-4-8[1m]",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "global.anthropic.claude-sonnet-4-6[1m]",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+  }
+}
