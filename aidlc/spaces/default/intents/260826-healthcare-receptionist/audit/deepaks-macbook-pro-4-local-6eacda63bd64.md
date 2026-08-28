@@ -3068,3 +3068,551 @@
 **Agent**: aidlc-pipeline-deploy-agent
 
 ---
+
+## Artifact Created
+**Timestamp**: 2026-08-28T12:07:20Z
+**Event**: ARTIFACT_CREATED
+**Tool**: Write
+**File**: <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/team-practices.md
+**Context**: inception > practices-discovery > team-practices.md
+
+---
+
+## Artifact Created
+**Timestamp**: 2026-08-28T12:07:39Z
+**Event**: ARTIFACT_CREATED
+**Tool**: Write
+**File**: <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/discovered-rules.md
+**Context**: inception > practices-discovery > discovered-rules.md
+
+---
+
+## Artifact Created
+**Timestamp**: 2026-08-28T12:08:01Z
+**Event**: ARTIFACT_CREATED
+**Tool**: Write
+**File**: <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/evidence.md
+**Context**: inception > practices-discovery > evidence.md
+
+---
+
+## Artifact Created
+**Timestamp**: 2026-08-28T12:08:04Z
+**Event**: ARTIFACT_CREATED
+**Tool**: Write
+**File**: <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/practices-discovery-timestamp.md
+**Context**: inception > practices-discovery > practices-discovery-timestamp.md
+
+---
+
+## Subagent Completed
+**Timestamp**: 2026-08-28T12:08:18Z
+**Event**: SUBAGENT_COMPLETED
+**Agent Type**: aidlc-pipeline-deploy-agent
+**Agent ID**: afd6d79b75b4207c7
+**Message**: Draft complete. All four declared artifacts are written under `aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/`:\n\n- `team-practices.md`\n- `discovered-rules.m
+
+---
+
+## Subagent Completed
+**Timestamp**: 2026-08-28T12:12:36Z
+**Event**: SUBAGENT_COMPLETED
+**Agent Type**: aidlc-quality-agent
+**Agent ID**: aa8a7953f65c7674f
+**Message**: Contribution written to `<project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/contributions/aidlc-quality-agent.md
+
+---
+
+## Human Turn
+**Timestamp**: 2026-08-28T12:12:36Z
+**Event**: HUMAN_TURN
+
+---
+
+## Subagent Completed
+**Timestamp**: 2026-08-28T12:13:39Z
+**Event**: SUBAGENT_COMPLETED
+**Agent Type**: aidlc-devsecops-agent
+**Agent ID**: a601435e6f0546d84
+**Message**: File written, structure verified, nothing touched outside `contributions/`.\n\n## Subagent Summary: Practices Discovery — Step 3 blind support review (devsecops)\n\n### Produced\n- `/Users/deepak/Desktop/c
+
+---
+
+## Human Turn
+**Timestamp**: 2026-08-28T12:13:39Z
+**Event**: HUMAN_TURN
+
+---
+
+## Subagent Completed
+**Timestamp**: 2026-08-28T12:13:40Z
+**Event**: SUBAGENT_COMPLETED
+**Agent Type**: aidlc-developer-agent
+**Agent ID**: aa10a65289c2aab5c
+**Message**: Contribution written. No files touched outside `contributions/`.\n\n## Subagent Summary: Practices Discovery (Step 3 — developer support review)\n\n### Produced\n- `/Users/deepak/Desktop/code/ai/ait-voice-
+
+---
+
+## Human Turn
+**Timestamp**: 2026-08-28T12:14:03Z
+**Event**: HUMAN_TURN
+
+---
+
+## Decision Recorded
+**Timestamp**: 2026-08-28T12:15:03Z
+**Event**: DECISION_RECORDED
+**Stage**: practices-discovery
+**Decision**: Practices interview: eight questions covering the audit-log contradiction, quality gates, PHI standards, external review, coverage shape, test data, deploy approval, and binding code conventions
+**Options**: See questions file
+
+---
+
+## Human Turn
+**Timestamp**: 2026-08-28T12:15:53Z
+**Event**: HUMAN_TURN
+
+---
+
+## Question Answered
+**Timestamp**: 2026-08-28T12:16:14Z
+**Event**: QUESTION_ANSWERED
+**Stage**: practices-discovery
+**Details**: Q1-Q4 all answered D (Not yet decided)
+
+---
+
+## Human Turn
+**Timestamp**: 2026-08-28T12:33:27Z
+**Event**: HUMAN_TURN
+
+---
+
+## Human Turn
+**Timestamp**: 2026-08-28T12:50:13Z
+**Event**: HUMAN_TURN
+
+---
+
+## Question Answered
+**Timestamp**: 2026-08-28T12:50:22Z
+**Event**: QUESTION_ANSWERED
+**Stage**: practices-discovery
+**Details**: Accepted all eight orchestrator recommendations: Q1=B two log classes, Q2=B blocking with expiring waivers, Q3=A stricter PHI standard, Q4=A bundle external review with counsel, Q5=A per-package branch coverage, Q6=B synthetic fixtures plus defined PHI environment, Q7=A audited machine gate, Q8=A+B+C all three conventions binding
+
+---
+
+## Artifact Created
+**Timestamp**: 2026-08-28T12:52:41Z
+**Event**: ARTIFACT_CREATED
+**Tool**: Write
+**File**: <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/team-practices.md
+**Context**: inception > practices-discovery > team-practices.md
+
+---
+
+## Artifact Created
+**Timestamp**: 2026-08-28T12:53:15Z
+**Event**: ARTIFACT_CREATED
+**Tool**: Write
+**File**: <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/discovered-rules.md
+**Context**: inception > practices-discovery > discovered-rules.md
+
+---
+
+## Artifact Created
+**Timestamp**: 2026-08-28T12:53:58Z
+**Event**: ARTIFACT_CREATED
+**Tool**: Write
+**File**: <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/evidence.md
+**Context**: inception > practices-discovery > evidence.md
+
+---
+
+## Artifact Created
+**Timestamp**: 2026-08-28T12:54:01Z
+**Event**: ARTIFACT_CREATED
+**Tool**: Write
+**File**: <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/practices-discovery-timestamp.md
+**Context**: inception > practices-discovery > practices-discovery-timestamp.md
+
+---
+
+## Subagent Completed
+**Timestamp**: 2026-08-28T12:54:29Z
+**Event**: SUBAGENT_COMPLETED
+**Agent Type**: aidlc-pipeline-deploy-agent
+**Agent ID**: a045a13dc5ba4eb63
+**Message**: The `practices-event` command is conductor-owned and the guard refused to let a delegated agent run it — I'll report that back rather than bypass it.\n\n## Summary\n\n**Stage:** practices-discovery (Incep
+
+---
+
+## Practices Discovered
+**Timestamp**: 2026-08-28T12:54:37Z
+**Event**: PRACTICES_DISCOVERED
+**Sources Scanned**: aidlc/spaces/default/memory/org.md (five practice sections, greenfield defaults); aidlc/spaces/default/memory/project.md (eight prior learned rules); ideation artifacts (initiative-brief, team-assessment, skill-matrix, constraint-register, raid-log, scope-document, intent-backlog, build-vs-buy); docs/vendors.md; workspace scan confirming no CI config, no linter config, no pyproject.toml, no git history of application code
+**Drafts**: team-practices.md, discovered-rules.md
+
+---
+
+## Decision Recorded
+**Timestamp**: 2026-08-28T12:54:58Z
+**Event**: DECISION_RECORDED
+**Stage**: practices-discovery
+**Decision**: Anything to keep as a durable practice from this stage?
+**Options**: c3 offer a reviewable proposal when a human defers repeatedly,c1 record whether an answer originated with the human or was recommended,c4 verify a scripted edit touched only its intended targets,Nothing to add
+
+---
+
+## Human Turn
+**Timestamp**: 2026-08-28T12:55:17Z
+**Event**: HUMAN_TURN
+
+---
+
+## Question Answered
+**Timestamp**: 2026-08-28T12:55:27Z
+**Event**: QUESTION_ANSWERED
+**Stage**: practices-discovery
+**Details**: c3 offer a reviewable proposal when a human defers repeatedly
+
+---
+
+## Rule Learned
+**Timestamp**: 2026-08-28T12:55:27Z
+**Event**: RULE_LEARNED
+**Stage**: practices-discovery
+**Candidate-ID**: c3
+**Content-Hash**: efb4e956f6e41170bf965bcb783d96e8e17aebb398623cc749f41e1c41e7c965
+**Destination**: <project-dir>/aidlc/spaces/default/memory/project.md
+**Heading**: ## Mandated
+**Source**: orchestrator
+
+---
+
+## Error Logged
+**Timestamp**: 2026-08-28T12:55:27Z
+**Event**: ERROR_LOGGED
+**Tool**: aidlc-state
+**Command**: aidlc-state gate-start practices-discovery --project-dir <project-dir>
+**Error**: Refusing to complete "practices-discovery": <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/practices-discovery-questions.md must contain exactly one `[Answer]: Looks correct` in its Consolidated Summary Confirmation section.
+
+---
+
+## Decision Recorded
+**Timestamp**: 2026-08-28T12:55:50Z
+**Event**: DECISION_RECORDED
+**Stage**: practices-discovery
+**Decision**: Does this all look correct before the affirmation gate?
+**Options**: Looks correct,Request changes
+**Checkpoint**: Consolidated Summary Confirmation
+**Questions File**: aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/practices-discovery-questions.md
+
+---
+
+## Human Turn
+**Timestamp**: 2026-08-28T13:02:42Z
+**Event**: HUMAN_TURN
+
+---
+
+## Summary Confirmation Recorded
+**Timestamp**: 2026-08-28T13:02:47Z
+**Event**: SUMMARY_CONFIRMATION_RECORDED
+**Stage**: practices-discovery
+**Details**: Looks correct
+**Checkpoint**: Consolidated Summary Confirmation
+**Questions File**: aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/practices-discovery-questions.md
+**Questions SHA-256**: 5db6649d37fffccb317942d0e7cf191466fe17c49d15612356e5b533faaa75e8
+**Hash Scope**: confirmed-content-v1
+
+---
+
+## Error Logged
+**Timestamp**: 2026-08-28T13:02:47Z
+**Event**: ERROR_LOGGED
+**Tool**: aidlc-state
+**Command**: aidlc-state gate-start practices-discovery --project-dir <project-dir>
+**Error**: Refusing to continue "practices-discovery": this stage's output document <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/team-practices.md was not saved after the confirmed answers. Save the document after confirmation, then continue.
+
+---
+
+## Error Logged
+**Timestamp**: 2026-08-28T13:03:06Z
+**Event**: ERROR_LOGGED
+**Tool**: aidlc-state
+**Command**: aidlc-state gate-start practices-discovery --project-dir <project-dir>
+**Error**: Refusing to continue "practices-discovery": this stage's output document <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/team-practices.md was not saved after the confirmed answers. Save the document after confirmation, then continue.
+
+---
+
+## Artifact Created
+**Timestamp**: 2026-08-28T13:03:41Z
+**Event**: ARTIFACT_CREATED
+**Tool**: Write
+**File**: <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/practices-discovery-timestamp.md
+**Context**: inception > practices-discovery > practices-discovery-timestamp.md
+
+---
+
+## Artifact Updated
+**Timestamp**: 2026-08-28T13:03:48Z
+**Event**: ARTIFACT_UPDATED
+**Tool**: Edit
+**File**: <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/evidence.md
+**Context**: inception > practices-discovery > evidence.md
+
+---
+
+## Artifact Created
+**Timestamp**: 2026-08-28T13:04:19Z
+**Event**: ARTIFACT_CREATED
+**Tool**: Write
+**File**: <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/team-practices.md
+**Context**: inception > practices-discovery > team-practices.md
+
+---
+
+## Artifact Created
+**Timestamp**: 2026-08-28T13:04:46Z
+**Event**: ARTIFACT_CREATED
+**Tool**: Write
+**File**: <project-dir>/aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/discovered-rules.md
+**Context**: inception > practices-discovery > discovered-rules.md
+
+---
+
+## Subagent Completed
+**Timestamp**: 2026-08-28T13:04:53Z
+**Event**: SUBAGENT_COMPLETED
+**Agent Type**: aidlc-pipeline-deploy-agent
+**Agent ID**: a694c218641d02c4e
+**Message**: All four files written with the Write/Edit tool (not shell redirection), so each generates a recorded write event after the confirmation timestamp:\n\n1. **`practices-discovery-timestamp.md`** — refresh
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-08-28T13:04:59Z
+**Event**: SENSOR_FIRED
+**Fire id**: a13d76b0
+**Sensor ID**: required-sections
+**Stage slug**: practices-discovery
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/team-practices.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-08-28T13:04:59Z
+**Event**: SENSOR_PASSED
+**Fire id**: a13d76b0
+**Sensor ID**: required-sections
+**Stage slug**: practices-discovery
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/team-practices.md
+**Duration ms**: 28
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-08-28T13:04:59Z
+**Event**: SENSOR_FIRED
+**Fire id**: 2c74bd7f
+**Sensor ID**: required-sections
+**Stage slug**: practices-discovery
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/discovered-rules.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-08-28T13:04:59Z
+**Event**: SENSOR_PASSED
+**Fire id**: 2c74bd7f
+**Sensor ID**: required-sections
+**Stage slug**: practices-discovery
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/discovered-rules.md
+**Duration ms**: 24
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-08-28T13:04:59Z
+**Event**: SENSOR_FIRED
+**Fire id**: 6f50378f
+**Sensor ID**: required-sections
+**Stage slug**: practices-discovery
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/evidence.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-08-28T13:04:59Z
+**Event**: SENSOR_PASSED
+**Fire id**: 6f50378f
+**Sensor ID**: required-sections
+**Stage slug**: practices-discovery
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/evidence.md
+**Duration ms**: 24
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-08-28T13:04:59Z
+**Event**: SENSOR_FIRED
+**Fire id**: e405b9b3
+**Sensor ID**: required-sections
+**Stage slug**: practices-discovery
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/practices-discovery-timestamp.md
+
+---
+
+## Sensor Failed
+**Timestamp**: 2026-08-28T13:04:59Z
+**Event**: SENSOR_FAILED
+**Fire id**: e405b9b3
+**Sensor ID**: required-sections
+**Stage slug**: practices-discovery
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/practices-discovery-timestamp.md
+**Detail path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/.aidlc-sensors/practices-discovery/required-sections-e405b9b3.md
+**Findings count**: 2
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-08-28T13:04:59Z
+**Event**: SENSOR_FIRED
+**Fire id**: a6b83753
+**Sensor ID**: upstream-coverage
+**Stage slug**: practices-discovery
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/team-practices.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-08-28T13:04:59Z
+**Event**: SENSOR_PASSED
+**Fire id**: a6b83753
+**Sensor ID**: upstream-coverage
+**Stage slug**: practices-discovery
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/team-practices.md
+**Duration ms**: 25
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-08-28T13:04:59Z
+**Event**: SENSOR_FIRED
+**Fire id**: e233cd39
+**Sensor ID**: upstream-coverage
+**Stage slug**: practices-discovery
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/discovered-rules.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-08-28T13:04:59Z
+**Event**: SENSOR_PASSED
+**Fire id**: e233cd39
+**Sensor ID**: upstream-coverage
+**Stage slug**: practices-discovery
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/discovered-rules.md
+**Duration ms**: 22
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-08-28T13:04:59Z
+**Event**: SENSOR_FIRED
+**Fire id**: 361fb114
+**Sensor ID**: upstream-coverage
+**Stage slug**: practices-discovery
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/evidence.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-08-28T13:04:59Z
+**Event**: SENSOR_PASSED
+**Fire id**: 361fb114
+**Sensor ID**: upstream-coverage
+**Stage slug**: practices-discovery
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/evidence.md
+**Duration ms**: 25
+
+---
+
+## Sensor Fired
+**Timestamp**: 2026-08-28T13:04:59Z
+**Event**: SENSOR_FIRED
+**Fire id**: 5f69bc7d
+**Sensor ID**: upstream-coverage
+**Stage slug**: practices-discovery
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/practices-discovery-timestamp.md
+
+---
+
+## Sensor Passed
+**Timestamp**: 2026-08-28T13:05:00Z
+**Event**: SENSOR_PASSED
+**Fire id**: 5f69bc7d
+**Sensor ID**: upstream-coverage
+**Stage slug**: practices-discovery
+**Output path**: aidlc/spaces/default/intents/260826-healthcare-receptionist/inception/practices-discovery/practices-discovery-timestamp.md
+**Duration ms**: 27
+
+---
+
+## Stage Awaiting Approval
+**Timestamp**: 2026-08-28T13:05:00Z
+**Event**: STAGE_AWAITING_APPROVAL
+**Stage**: practices-discovery
+
+---
+
+## Human Turn
+**Timestamp**: 2026-08-28T13:06:17Z
+**Event**: HUMAN_TURN
+
+---
+
+## Practices Affirmed
+**Timestamp**: 2026-08-28T13:06:21Z
+**Event**: PRACTICES_AFFIRMED
+**Affirming User**: Deepak Kushwaha
+**Sections Written**: Way of Working, Walking Skeleton, Testing Posture, Deployment, Code Style
+**Mandated Rules Appended**: 92
+**Forbidden Rules Appended**: 27
+
+---
+
+## Gate Approved
+**Timestamp**: 2026-08-28T13:06:38Z
+**Event**: GATE_APPROVED
+**Stage**: practices-discovery
+**User Input**: Approve
+
+---
+
+## Stage Completion
+**Timestamp**: 2026-08-28T13:06:38Z
+**Event**: STAGE_COMPLETED
+**Stage**: practices-discovery
+**Validation Basis**: {"graphContract":"sha256:886af627a0fea6d271a662e4a54b4c5993ecee715d6144d46d4a58c2bc3d19bb","inputs":[],"outputs":[{"artifact":"discovered-rules","contentHash":"sha256:b1ed7a150939dc6fe368c96654014f0cc75414111ccadcd99cf0717ddfca7c27","instanceCount":1,"presentCount":1,"producer":"practices-discovery","required":true,"structureHash":"sha256:6e4901cdd65cb807201a698799fae5abb8f6df08b5075fb02d1864fc8a4ed5aa"},{"artifact":"evidence","contentHash":"sha256:5f4b5f18869d8452aff1b07712ab94f374bf7700a6bde7a8b8e2604485d6a857","instanceCount":1,"presentCount":1,"producer":"practices-discovery","required":true,"structureHash":"sha256:24336f63f52f18d78fdb58248b6a3caebe5a79e6ddc938f1d3e1dfba0f45373c"},{"artifact":"practices-discovery-timestamp","contentHash":"sha256:9fc034c14b85052779597e79415d9d100a6528b81a2e84648f00540f1ecf5390","instanceCount":1,"presentCount":1,"producer":"practices-discovery","required":true,"structureHash":"sha256:1705533909500c5efb7f3062295bc3043f66a77a8b7101e1efcf5ed4fa346437"},{"artifact":"team-practices","contentHash":"sha256:0e72c8b2720b600496f479227cc641b63793c1feb5da413ec8a64440544b86b8","instanceCount":1,"presentCount":1,"producer":"practices-discovery","required":true,"structureHash":"sha256:526c2f75622ceeb66db21d693462b3068b840e8a5ece84305270d4297f2de863"}],"projectType":"greenfield","schema":3}
+**Details**: Stage Practices Discovery approved by gate
+**Tokens In**: 212
+**Tokens Out**: 95500
+**Cache Read**: 36324899
+**Cache Write**: 827942
+**Cost USD**: 24.43
+**By Model**: opus-5=21.96; sonnet-5=2.47
+**By Agent**: main=16.66; aidlc-pipeline-deploy-agent=2.47; aidlc-quality-agent=1.49; aidlc-developer-agent=1.90; aidlc-devsecops-agent=1.91
+**Tokens By Model**: opus-5=152/77.6k/33.5M/472.1k; sonnet-5=60/17.9k/2.9M/355.9k
+**Tokens By Agent**: main=72/38.4k/29.6M/91.7k; aidlc-pipeline-deploy-agent=60/17.9k/2.9M/355.9k; aidlc-quality-agent=18/14.3k/758.8k/119.9k; aidlc-developer-agent=32/9.7k/1.7M/132.2k; aidlc-devsecops-agent=30/15.2k/1.5M/128.4k
+
+---
+
+## Stage Start
+**Timestamp**: 2026-08-28T13:06:38Z
+**Event**: STAGE_STARTED
+**Stage**: requirements-analysis
+**Agent**: aidlc-product-agent
+
+---

@@ -1,9 +1,12 @@
-# Team-Level Rules
+# Team Practices
 
-> This team's affirmed practices and corrections. Loaded after `org.md` as
-> strict-additive guidance; contradictions with broader policy are rejected.
-> Populated by the practices-discovery affirmation gate. Edit at the gate,
-> not directly.
+Affirmed at practices-discovery (Inception). This project is a solo,
+greenfield build with no second reader by default (`skill-matrix.md`), so the
+practices below lean on machine-checked gates wherever a human reviewer would
+otherwise have caught the mistake. Three specialists reviewed the lead's
+draft independently; the human resolved the open trade-offs through an
+eight-question interview, answered by accepting a full set of orchestrator
+recommendations after review (see `evidence.md` for the exact provenance).
 
 ## Way of Working
 
@@ -145,14 +148,3 @@
     into a log line — into a build failure.
   - See `discovered-rules.md` for the `## Mandated`/`## Forbidden` form of
     these three conventions.
-## Forbidden
-
-<!-- Team-specific forbidden patterns -->
-
-## Mandated
-
-<!-- Team-specific mandates -->
-
-## Corrections
-
-<!-- Self-learning loop appends here. -->
