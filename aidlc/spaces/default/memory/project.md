@@ -186,6 +186,7 @@ real patient data touches the system. This is the only control identified (affir
 during review that covers redaction correctness, consent correctness, and (affirmed 2026-08-28)
 audit completeness — the three failure classes no automated scanner has an (affirmed 2026-08-28)
 opinion about. (source: Q4 of the practices-discovery interview) (affirmed 2026-08-28)
+- ALWAYS set a non-functional target the team can actually meet rather than the conventional figure for the category. Availability, latency, recovery-time and coverage targets have reflex answers — 99.9 percent, four nines, sub-second — that get adopted because they sound serious rather than because anyone checked whether the staffing, redundancy and on-call response they imply exist. A target nobody can hold is worse than a lower one stated honestly: it is a commitment the team will quietly miss, and it hides the real operating posture from whoever plans against it. Check the target against the capacity actually recorded for the project, and where a lower target is chosen, pair it with an explicit obligation that bounds what happens in the shortfall. (learned 2026-08-28) <!-- cid:260826-healthcare-receptionist:requirements-analysis:333b689cc70caac46c5b66ec1b95f4ce24d21b22de9bdb670c3b713a272721a0 -->
 ## Corrections
 
 <!-- Project-specific corrections from human feedback. -->
