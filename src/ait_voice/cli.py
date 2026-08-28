@@ -1,0 +1,91 @@
+"""Run a call through the pipeline and report what it cost.
+
+    uv run ait-voice                      # offline providers, US tenant
+    uv run ait-voice --region india
+    uv run ait-voice --turns 12
+
+With no credentials configured this runs the offline provider set, which
+exercises the real code path with no network and no PHI leaving the machine.
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import sys
+
+from ait_voice.core.logging import configure_logging
+from ait_voice.core.pipeline import CallResult, VoicePipeline
+from ait_voice.core.types import Region, TenantContext
+from ait_voice.providers.base import ProviderRegistry
+from ait_voice.providers.offline import offline_provider_set
+
+DEMO_SCRIPT = [
+    "Hi, I need to book an appointment.",
+    "Tuesday morning if you have anything.",
+    "Actually, can I speak to someone please?",
+]
+
+
+def _report(result: CallResult) -> None:
+    print()
+    print(f"  call        {result.call_id}")
+    print(f"  tenant      {result.tenant_id} ({result.region})")
+    print(f"  providers   {', '.join(f'{k}={v}' for k, v in result.providers.items())}")
+    print(f"  turns       {result.turns}")
+    if result.escalated:
+        print(f"  escalated   yes — {result.escalation_reason}")
+    else:
+        print("  escalated   no")
+
+    print()
+    if not result.timings:
+        print("  no turns measured")
+        return
+
+    print("  turn latency (ms)")
+    print("  ---------------------------------------------")
+    print("   #      stt      llm      tts    total   target")
+    for i, t in enumerate(result.timings, 1):
+        mark = "ok" if t.meets_target else "OVER"
+        print(
+            f"  {i:>2}  {t.stt_ms:>7.0f}  {t.llm_ms:>7.0f}  "
+            f"{t.tts_first_audio_ms:>7.0f}  {t.total_ms:>7.0f}   {mark}"
+        )
+    print("  ---------------------------------------------")
+
+    p95 = result.p95_ms
+    verdict = "MEETS" if result.meets_latency_target else "MISSES"
+    print(f"  p95 {p95:.0f}ms — {verdict} the NFR1.1 target of 1500ms")
+    print()
+
+
+async def _run(region: Region, turns: int) -> CallResult:
+    registry = ProviderRegistry()
+    registry.register(region, offline_provider_set(script=DEMO_SCRIPT))
+
+    tenant = TenantContext(tenant_id="demo-clinic", region=region)
+    pipeline = VoicePipeline(registry, clinic_name="Northside Medical")
+    return await pipeline.handle_call(tenant, call_id="demo-001", max_turns=turns)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="ait-voice", description=__doc__)
+    parser.add_argument(
+        "--region",
+        choices=[r.value for r in Region],
+        default=Region.US.value,
+        help="tenant region — determines which providers serve the call",
+    )
+    parser.add_argument("--turns", type=int, default=8, help="maximum conversational turns")
+    parser.add_argument("--log-level", default=None, help="DEBUG, INFO, WARNING")
+    args = parser.parse_args(argv)
+
+    configure_logging(args.log_level)
+    result = asyncio.run(_run(Region(args.region), args.turns))
+    _report(result)
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover
+    sys.exit(main())
