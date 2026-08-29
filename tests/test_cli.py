@@ -73,3 +73,43 @@ class TestReport:
         )
         _report(result)
         assert "caller_requested_human" in capsys.readouterr().out
+
+
+class TestDoctor:
+    def test_reports_all_offline_without_credentials(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        for var in (
+            "ANTHROPIC_API_KEY",
+            "DEEPGRAM_API_KEY",
+            "ELEVENLABS_API_KEY",
+            "TWILIO_ACCOUNT_SID",
+        ):
+            monkeypatch.delenv(var, raising=False)
+
+        assert main(["--doctor", "--log-level", "WARNING"]) == 0
+
+        out = capsys.readouterr().out
+        assert "offline" in out
+        assert "Nothing is wired yet" in out
+
+    def test_warns_when_a_live_leg_lacks_a_baa(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A live vendor with no confirmed BAA is the case worth shouting about."""
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+        assert main(["--doctor", "--log-level", "WARNING"]) == 0
+
+        out = capsys.readouterr().out
+        assert "LIVE" in out
+        assert "REFUSE US tenant data" in out
+
+    def test_reports_the_baa_register_contents(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+        main(["--doctor", "--log-level", "WARNING"])
+
+        assert "BAA register" in capsys.readouterr().out

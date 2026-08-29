@@ -89,5 +89,11 @@ source = ["src/ait_voice"]
 [tool.coverage.report]
 show_missing = true
 # Vendor transport adapters may be excluded from the floor, but owe contract or
-# recorded-fixture tests instead — see requirements [Q5].
-omit = ["src/ait_voice/providers/_transport/*"]
+# recorded-fixture tests instead — an exclusion with no replacement obligation
+# is how a coverage gate becomes decorative.
+#
+# Nothing is omitted wholesale. The one exclusion is `serve()` in the Twilio
+# provider, marked `# pragma: no cover` at the function with its reason stated
+# there: it binds a socket rather than translating anything, and the handshake
+# contract it depends on is covered in tests/test_provider_contracts.py.
+exclude_also = ["if TYPE_CHECKING:"]

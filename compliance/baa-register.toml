@@ -1,0 +1,55 @@
+# BAA register — which vendors may process US-tenant PHI.
+#
+# Constraint C-R1: every vendor touching call audio, transcripts or caller
+# identity needs its own executed Business Associate Agreement. A BAA does not
+# flow down to subcontractors, so one gap breaks the chain.
+#
+# This file is the enforcement point. A vendor absent here, or present with
+# `baa = false`, will REFUSE to process a US tenant's data — the providers
+# raise rather than proceeding. Set `baa = true` only when an executed
+# agreement actually exists, and record where it lives.
+#
+# India tenants are governed by DPDP rather than HIPAA and are not gated by
+# this file. That is a separate obligation, not a lesser one.
+#
+# `docs/vendors.md` records how each vendor's BAA is obtained; the notes below
+# are a summary, not a substitute for confirming directly with the vendor
+# before contracting.
+
+[vendor.anthropic]
+baa = false
+how = "Enterprise/sales; HIPAA must be activated in Enterprise settings"
+agreement = ""          # path or URL to the executed agreement
+
+[vendor.deepgram]
+baa = false
+how = "On request via sales"
+agreement = ""
+
+[vendor.elevenlabs]
+baa = false
+how = "Enterprise tier, with Zero Retention Mode"
+agreement = ""
+
+[vendor.twilio]
+baa = false
+how = "Security or Enterprise Edition; Media Streams explicitly HIPAA-eligible"
+agreement = ""
+
+[vendor.assemblyai]
+baa = false
+how = "Self-serve in dashboard, no premium — the least friction of any vendor found"
+agreement = ""
+
+# India-market vendors. `docs/vendors.md` records that these have no HIPAA
+# posture as a category, so they must never appear with `baa = true`.
+
+[vendor.rumik]
+baa = false
+how = "NONE — terms disclaim clinical use. India region only, never for US PHI."
+agreement = ""
+
+[vendor.exotel]
+baa = false
+how = "NONE — ISO 27001 only. India region only."
+agreement = ""
