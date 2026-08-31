@@ -9,6 +9,7 @@ not tested here.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from datetime import time
 
 import pytest
 
@@ -18,6 +19,7 @@ from ait_voice.core.pipeline import (
     ESCALATE_DEPENDENCY,
     VoicePipeline,
 )
+from ait_voice.core.tenancy import OutOfHoursPolicy, StaffedHours, TenantConfig
 from ait_voice.core.types import PHI, Region, TenantContext, TurnTiming, Utterance
 from ait_voice.providers.base import (
     ProviderRegistry,
@@ -203,13 +205,25 @@ class TestLatencyMeasurement:
 
 class TestCallResultCarriesNoPHI:
     async def test_result_fields_are_all_opaque(self) -> None:
-        """A CallResult is logged and persisted, so it must hold no PHI."""
+        """A CallResult is logged and persisted, so it must hold no PHI.
+
+        Only the textual fields are scanned. An earlier version rendered the
+        whole ``__dict__`` and searched for ``1985`` — which a latency of
+        1985 ms satisfies, failing a PHI test for a timing reason. Numbers
+        here are durations and counts; content can only arrive as a string.
+        """
         registry = _registry(Region.US, ["I'm Priya Sharma, born 1985-04-12"])
         result = await VoicePipeline(registry).handle_call(_tenant(), "call-8")
 
-        rendered = repr(result.__dict__)
-        assert "Priya" not in rendered
-        assert "1985" not in rendered
+        textual = [v for v in vars(result).values() if isinstance(v, str)]
+        textual += [str(k) + str(v) for k, v in result.providers.items()]
+        rendered = " ".join(textual)
+
+        for fragment in ("Priya", "Sharma", "1985-04-12", "born"):
+            assert fragment not in rendered, f"{fragment!r} leaked into CallResult"
+
+        # And nothing textual is long enough to be transcript content.
+        assert all(len(v) <= 64 for v in textual)
 
 
 class TestOfflineProviders:
@@ -240,3 +254,95 @@ class TestOfflineProviders:
 
         turns = [u async for u in stt.transcribe(_tenant(), audio())]
         assert [t.text.reveal() for t in turns] == ["one", "two"]
+
+
+class TestTenantConfigDrivesTheCall:
+    """The tenant layer is only worth having if it changes what a caller hears."""
+
+    async def test_greeting_comes_from_the_tenant(self) -> None:
+        spoken: list[str] = []
+
+        class RecordingTTS(OfflineTTS):
+            async def synthesize(self, tenant, utterance, *, voice=None):  # noqa: ANN001
+                spoken.append(utterance.text.reveal())
+                async for chunk in super().synthesize(tenant, utterance, voice=voice):
+                    yield chunk
+
+        registry = ProviderRegistry()
+        registry.register(
+            Region.US,
+            ProviderSet(
+                stt=OfflineSTT(script=["book an appointment"]),
+                llm=OfflineLLM(),
+                tts=RecordingTTS(),
+                telephony=OfflineTelephony(),
+            ),
+        )
+        config = TenantConfig(
+            tenant_id="clinic-1",
+            region=Region.US,
+            clinic_name="Northside Medical",
+            greeting="You've reached the front desk.",
+        )
+
+        await VoicePipeline(registry, config=config).handle_call(config.context(), "c-9")
+
+        assert "You've reached the front desk." in spoken[0]
+
+    async def test_the_disclosure_still_precedes_a_configured_greeting(self) -> None:
+        """C-R3/C-R4 are not configurable — no greeting can displace them."""
+        config = TenantConfig(
+            tenant_id="clinic-1",
+            region=Region.US,
+            clinic_name="Northside",
+            greeting="How may I help?",
+        )
+        pipeline = VoicePipeline(_registry(Region.US, ["hi"]), config=config)
+
+        opening = pipeline._opening()
+
+        assert opening.index("AI assistant") < opening.index("How may I help?")
+        assert "recorded" in opening.lower()
+
+    async def test_escalation_routes_to_the_number_when_staffed(self) -> None:
+        config = TenantConfig(
+            tenant_id="clinic-1",
+            region=Region.US,
+            clinic_name="Northside",
+            staffed_hours=StaffedHours(days=frozenset(range(1, 8)), opens=time(0, 0),
+                                       closes=time(23, 59)),
+            escalation_number="+15551230000",
+        )
+        registry = _registry(Region.US, ["Can I speak to a person please?"])
+
+        result = await VoicePipeline(registry, config=config).handle_call(
+            config.context(), "c-10"
+        )
+
+        assert result.escalated
+        assert result.escalation_route == "+15551230000"
+
+    async def test_escalation_falls_to_the_policy_when_nobody_is_there(self) -> None:
+        config = TenantConfig(
+            tenant_id="clinic-1",
+            region=Region.US,
+            clinic_name="Northside",
+            staffed_hours=StaffedHours.never(),
+            escalation_number="+15551230000",
+            out_of_hours=OutOfHoursPolicy.TAKE_MESSAGE,
+        )
+        registry = _registry(Region.US, ["Can I speak to a person please?"])
+
+        result = await VoicePipeline(registry, config=config).handle_call(
+            config.context(), "c-11"
+        )
+
+        assert result.escalation_route == "take_message"
+
+    async def test_route_is_absent_without_a_config(self) -> None:
+        """The skeleton demo has no tenant store; it must still run."""
+        registry = _registry(Region.US, ["Can I speak to a person please?"])
+        result = await VoicePipeline(registry).handle_call(_tenant(), "c-12")
+
+        assert result.escalated
+        assert result.escalation_route is None

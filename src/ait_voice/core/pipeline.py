@@ -17,6 +17,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
 from ait_voice.core.logging import CallLogger
+from ait_voice.core.tenancy import TenantConfig
 from ait_voice.core.types import PHI, TenantContext, TurnTiming, Utterance
 from ait_voice.providers.base import ProviderRegistry, ProviderSet
 
@@ -65,6 +66,9 @@ class CallResult:
     timings: list[TurnTiming] = field(default_factory=list)
     escalated: bool = False
     escalation_reason: str | None = None
+    #: Where the escalation went — a transfer number, or the out-of-hours
+    #: policy that applied because nobody was available. Opaque; safe to log.
+    escalation_route: str | None = None
     providers: dict[str, str] = field(default_factory=dict)
 
     @property
@@ -90,9 +94,24 @@ class VoicePipeline:
     the vendor chain holds together and to measure what it costs.
     """
 
-    def __init__(self, registry: ProviderRegistry, *, clinic_name: str = "the clinic") -> None:
+    def __init__(
+        self,
+        registry: ProviderRegistry,
+        *,
+        clinic_name: str = "the clinic",
+        config: TenantConfig | None = None,
+    ) -> None:
+        """
+        Args:
+            config: The tenant's configuration. When supplied it drives the
+                greeting and the escalation route, so a call behaves the way
+                that clinic is set up rather than the way the default is.
+                ``clinic_name`` remains for the skeleton demo, which has no
+                tenant store behind it.
+        """
         self._registry = registry
-        self._clinic_name = clinic_name
+        self._config = config
+        self._clinic_name = config.clinic_name if config else clinic_name
 
     async def handle_call(
         self,
@@ -121,7 +140,7 @@ class VoicePipeline:
                 tenant,
                 providers,
                 sink,
-                Utterance(text=PHI(DISCLOSURE_TEMPLATE.format(clinic=self._clinic_name))),
+                Utterance(text=PHI(self._opening())),
             )
             log.info("disclosure spoken")
 
@@ -165,7 +184,12 @@ class VoicePipeline:
                 if reason := self._escalation_reason(reply):
                     result.escalated = True
                     result.escalation_reason = str(reason)
-                    log.info("escalating", reason=result.escalation_reason)
+                    result.escalation_route = self._route()
+                    log.info(
+                        "escalating",
+                        reason=result.escalation_reason,
+                        route=result.escalation_route,
+                    )
                     break
 
                 if result.turns >= max_turns:
@@ -180,6 +204,7 @@ class VoicePipeline:
             # live call, so the caller is told something before the handoff.
             result.escalated = True
             result.escalation_reason = str(ESCALATE_DEPENDENCY)
+            result.escalation_route = self._route()
             log.error("dependency failure", error_type=type(exc).__name__)
             try:
                 await self._speak(
@@ -202,6 +227,26 @@ class VoicePipeline:
             p95_ms=round(result.p95_ms, 1) if result.p95_ms else None,
         )
         return result
+
+    def _opening(self) -> str:
+        """Disclosure first, then the tenant's greeting.
+
+        The disclosure is prepended here rather than left to the greeting
+        template, so no configuration can remove it. C-R3 and C-R4 are Firm
+        constraints, and California AB 2905 requires the AI disclosure before
+        the message rather than after it.
+        """
+        disclosure = DISCLOSURE_TEMPLATE.format(clinic=self._clinic_name)
+        if self._config:
+            return f"{disclosure} {self._config.greeting}"
+        return disclosure
+
+    def _route(self) -> str | None:
+        """Where an escalation goes, given who is available right now."""
+        if not self._config:
+            return None
+        route = self._config.escalation_route()
+        return route if isinstance(route, str) else str(route)
 
     async def _speak(
         self,
