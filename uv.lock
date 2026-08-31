@@ -163,6 +163,7 @@ name = "ait-voice"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "httpx" },
     { name = "pydantic" },
     { name = "python-dotenv" },
 ]
@@ -193,6 +194,7 @@ requires-dist = [
     { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.40" },
     { name = "deepgram-sdk", marker = "extra == 'deepgram'", specifier = ">=3.7" },
     { name = "elevenlabs", marker = "extra == 'elevenlabs'", specifier = ">=1.9" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },

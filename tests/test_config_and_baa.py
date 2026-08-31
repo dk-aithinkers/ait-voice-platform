@@ -16,7 +16,7 @@ import pytest
 
 from ait_voice.config import LegStatus, build_registry, load_baa_register
 from ait_voice.core.types import PHI, Region, TenantContext, Utterance
-from ait_voice.providers.anthropic_llm import BAANotConfirmedError
+from ait_voice.providers.base import BAANotConfirmedError
 
 
 def _us() -> TenantContext:

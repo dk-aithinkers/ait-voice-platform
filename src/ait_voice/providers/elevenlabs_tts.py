@@ -21,6 +21,7 @@ import os
 from collections.abc import AsyncIterator
 
 from ait_voice.core.types import TenantContext, Utterance
+from ait_voice.providers.base import BAANotConfirmedError
 
 #: μ-law 8kHz — what telephony carriers actually carry. Requesting a studio
 #: format and downsampling would add latency to the leg NFR1.1 measures most
@@ -63,7 +64,6 @@ class ElevenLabsTTS:
         *,
         voice: str | None = None,
     ) -> AsyncIterator[bytes]:
-        from ait_voice.providers.anthropic_llm import BAANotConfirmedError
 
         # What the agent says can itself carry PHI — reading back an
         # appointment, confirming a name. Synthesis is a PHI processing step,

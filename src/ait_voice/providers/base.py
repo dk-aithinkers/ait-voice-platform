@@ -142,6 +142,16 @@ class ProviderSet:
         }
 
 
+class BAANotConfirmedError(RuntimeError):
+    """Raised when a vendor would receive PHI without an executed BAA.
+
+    Lives here rather than in a vendor module because every leg raises it and
+    no leg owns it. C-R1 is the rule it enforces: a BAA does not flow down to
+    subcontractors, so each vendor in the chain needs its own, and a vendor
+    without one must not receive call audio, transcripts, or caller identity.
+    """
+
+
 class UnregisteredRegionError(RuntimeError):
     """Raised when a tenant's region has no provider set configured.
 

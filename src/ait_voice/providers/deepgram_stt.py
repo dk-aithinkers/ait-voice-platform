@@ -17,6 +17,7 @@ import os
 from collections.abc import AsyncIterator
 
 from ait_voice.core.types import PHI, TenantContext, Utterance
+from ait_voice.providers.base import BAANotConfirmedError
 
 
 class DeepgramSTT:
@@ -54,7 +55,6 @@ class DeepgramSTT:
         *,
         language: str | None = None,
     ) -> AsyncIterator[Utterance]:
-        from ait_voice.providers.anthropic_llm import BAANotConfirmedError
 
         if tenant.is_phi_jurisdiction and not self._baa_confirmed:
             raise BAANotConfirmedError(

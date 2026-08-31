@@ -31,6 +31,7 @@ from collections.abc import AsyncIterator
 
 from ait_voice.core.logging import CallLogger
 from ait_voice.core.types import TenantContext
+from ait_voice.providers.base import BAANotConfirmedError
 
 
 class TwilioAudioSink:
@@ -106,7 +107,6 @@ class TwilioTelephony:
         tenant: TenantContext,
         call_id: str,
     ) -> tuple[AsyncIterator[bytes], TwilioAudioSink]:
-        from ait_voice.providers.anthropic_llm import BAANotConfirmedError
 
         if tenant.is_phi_jurisdiction and not self._baa_confirmed:
             raise BAANotConfirmedError(

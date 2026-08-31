@@ -18,17 +18,7 @@ from __future__ import annotations
 import os
 
 from ait_voice.core.types import PHI, TenantContext, Utterance
-
-
-class BAANotConfirmedError(RuntimeError):
-    """Raised when PHI would reach a vendor without a confirmed BAA.
-
-    Constraint C-R1: a BAA does not flow down to subcontractors, so every vendor
-    touching call audio, transcripts or caller identity needs its own. One gap
-    breaks the chain. This check is the enforcement point that rule otherwise
-    lacks — the security review noted a Hard constraint with no build-time check
-    is the weakest form it can take.
-    """
+from ait_voice.providers.base import BAANotConfirmedError
 
 
 class AnthropicLLM:

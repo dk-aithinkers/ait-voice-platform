@@ -6,6 +6,10 @@ requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.9",
     "python-dotenv>=1.0",
+    # Used only by the credential reachability check. Every vendor SDK already
+    # depends on it; declaring it makes that dependency ours rather than
+    # inherited, since we import it directly.
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
