@@ -138,9 +138,17 @@ def _build_tts(region: Region, baa: dict[str, bool]):  # noqa: ANN202
 
 
 def _build_telephony(region: Region, baa: dict[str, bool]):  # noqa: ANN202
-    if not os.environ.get("TWILIO_ACCOUNT_SID"):
+    # Both halves, not just the SID. Twilio authenticates with the pair, so a
+    # SID alone produces a leg that reports LIVE and then fails at the vendor —
+    # which is the same misleading shape the doctor's LIVE column had.
+    missing = [
+        var
+        for var in ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN")
+        if not os.environ.get(var)
+    ]
+    if missing:
         return OfflineTelephony(), LegStatus(
-            "telephony", "offline-telephony", False, "TWILIO_ACCOUNT_SID not set"
+            "telephony", "offline-telephony", False, f"{' and '.join(missing)} not set"
         )
 
     from ait_voice.providers.twilio_telephony import TwilioTelephony

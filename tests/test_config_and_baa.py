@@ -207,3 +207,26 @@ class TestLegStatus:
         a = LegStatus("llm", "anthropic", True, "BAA confirmed")
         b = LegStatus("llm", "anthropic", True, "BAA confirmed")
         assert a == b
+
+
+class TestTwilioNeedsBothHalves:
+    def test_a_sid_without_a_token_stays_offline(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Twilio authenticates with the pair; a SID alone cannot place a call."""
+        monkeypatch.setenv("TWILIO_ACCOUNT_SID", "AC123")
+        monkeypatch.delenv("TWILIO_AUTH_TOKEN", raising=False)
+
+        _, statuses = build_registry(regions=[Region.US], baa_register={})
+
+        telephony = next(s for s in statuses if s.leg == "telephony")
+        assert not telephony.real
+        assert "TWILIO_AUTH_TOKEN" in telephony.reason
+
+    def test_both_halves_make_it_live(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("TWILIO_ACCOUNT_SID", "AC123")
+        monkeypatch.setenv("TWILIO_AUTH_TOKEN", "secret")
+
+        _, statuses = build_registry(regions=[Region.US], baa_register={})
+
+        assert next(s for s in statuses if s.leg == "telephony").real
