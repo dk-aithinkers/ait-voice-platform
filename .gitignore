@@ -84,3 +84,7 @@ htmlcov/
 
 # Local runtime data — audit logs and call content
 var/
+
+# Frontend
+web/node_modules/
+web/dist/

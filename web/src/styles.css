@@ -1,0 +1,164 @@
+/* Deliberately plain. [Q6] records that AI Thinkers brand guidelines exist but
+   none were supplied to this repository, so applying invented colours would be
+   asserting a brand nobody approved. This is a neutral, legible shell for the
+   structure the wireframes define; Refined Mockups is where the brand lands. */
+
+:root {
+  --bg: #ffffff;
+  --surface: #f7f8fa;
+  --border: #d8dce3;
+  --text: #14171f;
+  --muted: #5b6472;
+  --accent: #1f4ba5;
+  --warn-bg: #fff6e0;
+  --warn-border: #d9a441;
+  --radius: 6px;
+  --gap: 1rem;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171f;
+    --surface: #1c212b;
+    --border: #333b49;
+    --text: #eef1f6;
+    --muted: #9aa4b4;
+    --accent: #86aaf0;
+    --warn-bg: #3a2f16;
+    --warn-border: #d9a441;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+a { color: var(--accent); }
+
+/* Visible focus everywhere. The wireframes name a keyboard entry point on every
+   screen, which only means something if focus can be seen. */
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+}
+.skip-link:focus {
+  left: 1rem;
+  top: 1rem;
+  z-index: 10;
+  background: var(--bg);
+  padding: 0.5rem 0.75rem;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+}
+
+.shell { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+
+header.app {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap);
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+header.app h1 { font-size: 1.35rem; margin: 0; }
+.role-badge { color: var(--muted); font-size: 0.85rem; }
+
+nav.tabs { display: flex; gap: 0.25rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+nav.tabs a {
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius);
+  text-decoration: none;
+  color: var(--text);
+}
+nav.tabs a[aria-current="page"] {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-weight: 600;
+}
+
+h2 { font-size: 1.05rem; margin: 1.75rem 0 0.75rem; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--gap); }
+.tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.9rem;
+}
+.tile dt { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.3rem; }
+.tile dd { margin: 0; font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+table { width: 100%; border-collapse: collapse; }
+caption { text-align: left; color: var(--muted); padding-bottom: 0.5rem; }
+th, td { text-align: left; padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 600; font-size: 0.85rem; }
+td.num { font-variant-numeric: tabular-nums; }
+tbody tr:hover { background: var(--surface); }
+
+.table-wrap { overflow-x: auto; }
+
+button, .button {
+  font: inherit;
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+button[disabled] { opacity: 0.55; cursor: not-allowed; }
+
+.banner {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  display: flex;
+  gap: var(--gap);
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.transcript { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.transcript .line { display: grid; grid-template-columns: 5.5rem 1fr; gap: 0.75rem; padding: 0.6rem 0.8rem; }
+.transcript .line + .line { border-top: 1px solid var(--border); }
+.transcript .who { color: var(--muted); font-size: 0.85rem; }
+
+form.config { display: grid; gap: var(--gap); max-width: 32rem; }
+form.config label { display: grid; gap: 0.3rem; }
+form.config input, form.config select {
+  font: inherit;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.muted { color: var(--muted); }
+.note { color: var(--muted); font-size: 0.87rem; margin: 0.5rem 0 0; }
+.error {
+  border: 1px solid var(--warn-border);
+  background: var(--warn-bg);
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+}
+.empty { color: var(--muted); padding: 1.5rem 0; }
+
+.signin { max-width: 26rem; margin: 4rem auto; display: grid; gap: var(--gap); }
