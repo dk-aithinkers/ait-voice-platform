@@ -33,9 +33,13 @@ api = [
     "fastapi>=0.141.1",
     "uvicorn[standard]>=0.52.4",
 ]
+postgres = [
+    "asyncpg>=0.31.0",
+]
 
 [project.scripts]
 ait-voice = "ait_voice.cli:main"
+ait-voice-migrate = "ait_voice.db.migrate:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -82,6 +86,7 @@ ignore = [
 "src/ait_voice/cli.py" = ["T20"]  # the CLI is the one place print() is the point
 # The CI gates are command-line tools whose entire output is their report.
 "scripts/**" = ["T20"]
+"src/ait_voice/db/migrate.py" = ["T20"]  # a CLI; its output is the report
 
 # ---------------------------------------------------------------------------
 # Coverage — per-package BRANCH coverage, not global line coverage.
