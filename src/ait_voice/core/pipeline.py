@@ -29,7 +29,7 @@ from ait_voice.core.handoff import (
 from ait_voice.core.logging import CallLogger
 from ait_voice.core.tenancy import TenantConfig
 from ait_voice.core.types import PHI, TenantContext, TurnTiming, Utterance
-from ait_voice.providers.base import ProviderRegistry, ProviderSet
+from ait_voice.providers.base import DialogSession, ProviderRegistry, ProviderSet
 from ait_voice.providers.cascaded import transport_for
 
 #: FR1.3 and FR1.4: the AI disclosure and the recording disclosure are spoken at
@@ -37,9 +37,7 @@ from ait_voice.providers.cascaded import transport_for
 #: configuration. California AB 2905 requires the AI disclosure *before* the
 #: message, not after it, which is why this is prepended by the pipeline rather
 #: than left to the greeting template.
-DISCLOSURE_TEMPLATE = (
-    "You're speaking with an AI assistant at {clinic}, and this call is recorded."
-)
+DISCLOSURE_TEMPLATE = "You're speaking with an AI assistant at {clinic}, and this call is recorded."
 
 SYSTEM_PROMPT = """You are a receptionist for a medical clinic.
 
@@ -208,9 +206,7 @@ class VoicePipeline:
                 history.append(caller)
 
                 llm_start = time.perf_counter()
-                reply = await providers.llm.respond(
-                    tenant, history, system_prompt=SYSTEM_PROMPT
-                )
+                reply = await providers.llm.respond(tenant, history, system_prompt=SYSTEM_PROMPT)
                 llm_ms = (time.perf_counter() - llm_start) * 1000
 
                 spoken = await session.speak(reply)
@@ -238,8 +234,12 @@ class VoicePipeline:
                         log.info("recovery attempt")
                     else:
                         await self._escalate(
-                            tenant, session, result, ESCALATE_NOT_UNDERSTOOD,
-                            history, log,
+                            tenant,
+                            session,
+                            result,
+                            ESCALATE_NOT_UNDERSTOOD,
+                            history,
+                            log,
                         )
                         break
 
@@ -284,7 +284,12 @@ class VoicePipeline:
                 log.error("could not speak apology")
             try:
                 await self._escalate(
-                    tenant, session, result, ESCALATE_DEPENDENCY, history, log,
+                    tenant,
+                    session,
+                    result,
+                    ESCALATE_DEPENDENCY,
+                    history,
+                    log,
                     speak_promise=False,
                 )
             except Exception:  # noqa: BLE001 - never mask the original failure
@@ -318,7 +323,7 @@ class VoicePipeline:
     async def _escalate(
         self,
         tenant: TenantContext,
-        session,  # noqa: ANN001 - DialogSession protocol
+        session: DialogSession,
         result: CallResult,
         reason: EscalationReason,
         history: list[Utterance],
@@ -373,9 +378,7 @@ class VoicePipeline:
 
     @staticmethod
     def _not_understood(reply: Utterance) -> bool:
-        return any(
-            marker in reply.text.reveal().lower() for marker in NOT_UNDERSTOOD_MARKERS
-        )
+        return any(marker in reply.text.reveal().lower() for marker in NOT_UNDERSTOOD_MARKERS)
 
     def _opening(self) -> str:
         """Disclosure first, then the tenant's greeting.

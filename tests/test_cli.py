@@ -22,9 +22,7 @@ class TestCLIRuns:
         assert "demo-clinic" in out
         assert "p95" in out
 
-    def test_india_region_selects_that_chain(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_india_region_selects_that_chain(self, capsys: pytest.CaptureFixture[str]) -> None:
         assert main(["--region", "india", "--log-level", "WARNING"]) == 0
         assert "(india)" in capsys.readouterr().out
 
@@ -38,17 +36,13 @@ class TestCLIRuns:
 
 
 class TestReport:
-    def test_report_handles_a_call_with_no_turns(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_report_handles_a_call_with_no_turns(self, capsys: pytest.CaptureFixture[str]) -> None:
         from ait_voice.cli import _report
 
         _report(CallResult(call_id="c", tenant_id="t", region="us"))
         assert "no turns measured" in capsys.readouterr().out
 
-    def test_report_flags_a_turn_over_target(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_report_flags_a_turn_over_target(self, capsys: pytest.CaptureFixture[str]) -> None:
         from ait_voice.cli import _report
 
         result = CallResult(call_id="c", tenant_id="t", region="us", turns=1)
@@ -59,9 +53,7 @@ class TestReport:
         assert "OVER" in out
         assert "MISSES" in out
 
-    def test_report_shows_escalation_reason(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_report_shows_escalation_reason(self, capsys: pytest.CaptureFixture[str]) -> None:
         from ait_voice.cli import _report
 
         result = CallResult(
@@ -212,9 +204,7 @@ class TestLiveRun:
             registry = ProviderRegistry()
             for region in regions or []:
                 registry.register(region, offline_provider_set(script=["book me in"]))
-            return registry, [
-                LegStatus(leg="llm", provider="fake", real=True, reason="wired")
-            ]
+            return registry, [LegStatus(leg="llm", provider="fake", real=True, reason="wired")]
 
         monkeypatch.setattr("ait_voice.cli.load_dotenv_if_present", lambda: False)
         monkeypatch.setattr("ait_voice.cli.load_baa_register", dict)
@@ -224,8 +214,10 @@ class TestLiveRun:
     def test_a_live_run_renders_the_caller_then_places_the_call(
         self, _offline_as_if_live, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        assert main(["--live", "--region", "india", "--say", "book me in",
-                     "--log-level", "WARNING"]) == 0
+        assert (
+            main(["--live", "--region", "india", "--say", "book me in", "--log-level", "WARNING"])
+            == 0
+        )
 
         out = capsys.readouterr().out
         assert "rendering 1 caller line(s)" in out

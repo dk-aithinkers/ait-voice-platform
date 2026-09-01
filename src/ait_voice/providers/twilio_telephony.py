@@ -27,11 +27,12 @@ import asyncio
 import base64
 import json
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
+from typing import Any
 
 from ait_voice.core.logging import CallLogger
 from ait_voice.core.types import TenantContext
-from ait_voice.providers.base import BAANotConfirmedError
+from ait_voice.providers.base import BAANotConfirmedError, WebSocketLike
 
 
 class TwilioAudioSink:
@@ -41,7 +42,7 @@ class TwilioAudioSink:
     the stream SID it gave us at connect time.
     """
 
-    def __init__(self, websocket, stream_sid: str) -> None:  # noqa: ANN001
+    def __init__(self, websocket: WebSocketLike, stream_sid: str) -> None:
         self._ws = websocket
         self._stream_sid = stream_sid
         self._closed = False
@@ -68,9 +69,7 @@ class TwilioAudioSink:
         """
         if self._closed:
             return
-        await self._ws.send(
-            json.dumps({"event": "clear", "streamSid": self._stream_sid})
-        )
+        await self._ws.send(json.dumps({"event": "clear", "streamSid": self._stream_sid}))
 
     async def close(self) -> None:
         self._closed = True
@@ -96,9 +95,9 @@ class TwilioTelephony:
         self._auth_token = auth_token or os.environ.get("TWILIO_AUTH_TOKEN")
         self._baa_confirmed = baa_confirmed
         #: Populated by the server as calls connect, keyed by call id.
-        self._connections: dict[str, tuple[object, str]] = {}
+        self._connections: dict[str, tuple[WebSocketLike, str]] = {}
 
-    def attach(self, call_id: str, websocket, stream_sid: str) -> None:  # noqa: ANN001
+    def attach(self, call_id: str, websocket: WebSocketLike, stream_sid: str) -> None:
         """Register a connected call so :meth:`stream` can find it."""
         self._connections[call_id] = (websocket, stream_sid)
 
@@ -158,7 +157,7 @@ def inbound_twiml(websocket_url: str) -> str:
 
 
 async def serve(  # pragma: no cover - socket binding, see note below
-    handler,  # noqa: ANN001 - async callable(call_id, websocket, stream_sid)
+    handler: Callable[[str, WebSocketLike, str], Awaitable[None]],
     *,
     host: str = "0.0.0.0",  # noqa: S104 - a media server binds publicly by design
     port: int = 8080,
@@ -179,7 +178,13 @@ async def serve(  # pragma: no cover - socket binding, see note below
     """
     import websockets
 
-    async def on_connection(websocket) -> None:  # noqa: ANN001
+    # The vendor's own connection type, not ours: this is the single point
+    # where the websockets library's server API meets our code, and
+    # WebSocketLike deliberately does not describe it (no `close`, and the
+    # library expects its own ServerConnection). Narrowing to WebSocketLike
+    # happens at the handler call below, which is what the rest of the module
+    # actually consumes.
+    async def on_connection(websocket: Any) -> None:
         stream_sid: str | None = None
         call_sid: str | None = None
 

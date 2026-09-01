@@ -86,9 +86,7 @@ class TestAnthropicContract:
         fake = _FakeAnthropic(_FakeResponse([_FakeTextBlock("ok")]))
         llm._client = fake
 
-        await llm.respond(
-            _india(), [Utterance(text=PHI("my name is Priya"))], system_prompt="x"
-        )
+        await llm.respond(_india(), [Utterance(text=PHI("my name is Priya"))], system_prompt="x")
 
         sent = fake.messages.last_call["messages"][0]["content"]
         assert sent == "my name is Priya", "PHI must be revealed for the vendor call"
@@ -117,9 +115,7 @@ class TestAnthropicContract:
         class _ToolBlock:
             type = "tool_use"
 
-        llm._client = _FakeAnthropic(
-            _FakeResponse([_ToolBlock(), _FakeTextBlock("just this")])
-        )
+        llm._client = _FakeAnthropic(_FakeResponse([_ToolBlock(), _FakeTextBlock("just this")]))
 
         reply = await llm.respond(_india(), [Utterance(text=PHI("hi"))], system_prompt="x")
         assert reply.text.reveal() == "just this"
@@ -184,9 +180,7 @@ class TestElevenLabsContract:
         fake = _FakeElevenLabs([b"\x01"])
         tts._client = fake
 
-        async for _ in tts.synthesize(
-            _india(), Utterance(text=PHI("hi")), voice="v-override"
-        ):
+        async for _ in tts.synthesize(_india(), Utterance(text=PHI("hi")), voice="v-override"):
             pass
 
         assert fake.text_to_speech.last_call["voice_id"] == "v-override"
@@ -195,9 +189,7 @@ class TestElevenLabsContract:
         """An empty frame written to the call would be wasted work."""
         tts._client = _FakeElevenLabs([b"", b"\x01\x02", b"", b"\x03"])
 
-        chunks = [
-            c async for c in tts.synthesize(_india(), Utterance(text=PHI("hi")))
-        ]
+        chunks = [c async for c in tts.synthesize(_india(), Utterance(text=PHI("hi")))]
         assert chunks == [b"\x01\x02", b"\x03"]
 
 
@@ -250,9 +242,7 @@ class TestTwilioContract:
         assert chunks == [b"\xff\xfe"]
 
     async def test_stop_frame_ends_the_stream(self, telephony) -> None:  # noqa: ANN001
-        ws = _FakeWebSocket(
-            [_media_frame(b"\x01"), {"event": "stop"}, _media_frame(b"\x02")]
-        )
+        ws = _FakeWebSocket([_media_frame(b"\x01"), {"event": "stop"}, _media_frame(b"\x02")])
         telephony.attach("call-2", ws, "MZ")
 
         inbound, _ = await telephony.stream(_india(), "call-2")
@@ -260,9 +250,7 @@ class TestTwilioContract:
 
         assert chunks == [b"\x01"], "audio after hangup must not be yielded"
 
-    async def test_outbound_audio_is_encoded_with_the_stream_sid(
-        self, telephony
-    ) -> None:  # noqa: ANN001
+    async def test_outbound_audio_is_encoded_with_the_stream_sid(self, telephony) -> None:  # noqa: ANN001
         ws = _FakeWebSocket([{"event": "stop"}])
         telephony.attach("call-3", ws, "MZ-abc")
 

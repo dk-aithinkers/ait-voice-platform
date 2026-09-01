@@ -80,7 +80,7 @@ async def _audio(chunks: int = 2):  # noqa: ANN202
         await asyncio.sleep(0)
 
 
-def _install_fake(monkeypatch: pytest.MonkeyPatch, script: list[_FakeResult]) -> list:
+def _install_fake(monkeypatch: pytest.MonkeyPatch, script: list[_FakeResult]) -> list[Any]:
     """Patch the vendor SDK symbols the adapter imports lazily."""
     created: list[_FakeLiveClient] = []
 
@@ -139,17 +139,13 @@ class TestDeepgramContract:
         self, stt, monkeypatch: pytest.MonkeyPatch
     ) -> None:  # noqa: ANN001
         """Silence produces empty results; they are not turns."""
-        _install_fake(
-            monkeypatch, [_FakeResult([""]), _FakeResult(["hello"]), _FakeResult([])]
-        )
+        _install_fake(monkeypatch, [_FakeResult([""]), _FakeResult(["hello"]), _FakeResult([])])
 
         turns = [u async for u in stt.transcribe(_india(), _audio())]
 
         assert [t.text.reveal() for t in turns] == ["hello"]
 
-    async def test_audio_reaches_the_vendor(
-        self, stt, monkeypatch: pytest.MonkeyPatch
-    ) -> None:  # noqa: ANN001
+    async def test_audio_reaches_the_vendor(self, stt, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: ANN001
         created = _install_fake(monkeypatch, [_FakeResult(["hi"])])
 
         [u async for u in stt.transcribe(_india(), _audio(chunks=3))]
@@ -189,9 +185,7 @@ class TestDeepgramContract:
 
         assert created[0].started_with["language"] == "en-US"
 
-    async def test_endpointing_is_configured(
-        self, stt, monkeypatch: pytest.MonkeyPatch
-    ) -> None:  # noqa: ANN001
+    async def test_endpointing_is_configured(self, stt, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: ANN001
         """Waiting for the vendor's end-of-turn beats a fixed silence timeout."""
         created = _install_fake(monkeypatch, [_FakeResult(["hi"])])
 

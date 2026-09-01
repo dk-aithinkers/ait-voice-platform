@@ -33,11 +33,12 @@ import hashlib
 import json
 import os
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 from ait_voice.core.types import PHI, TenantContext
 
@@ -140,7 +141,7 @@ class AuditEntry:
         )
 
 
-def _reject_personal_data(detail: dict[str, object]) -> None:
+def _reject_personal_data(detail: Mapping[str, object]) -> None:
     """Refuse anything that could carry content into the audit log.
 
     Deliberately strict. PHI is refused outright; so are free strings, because
@@ -218,7 +219,7 @@ class AuditLog:
         self._last_hash[key] = entry.content_hash()
         return entry
 
-    def read(self, tenant: TenantContext) -> Iterator[dict]:
+    def read(self, tenant: TenantContext) -> Iterator[dict[str, Any]]:
         path = self._path(tenant)
         if not path.exists():
             return

@@ -26,7 +26,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ait_voice.core.types import Region
-from ait_voice.providers.base import ProviderRegistry, ProviderSet
+from ait_voice.providers.base import (
+    LLMProvider,
+    ProviderRegistry,
+    ProviderSet,
+    STTProvider,
+    TelephonyProvider,
+    TTSProvider,
+)
 from ait_voice.providers.offline import (
     OfflineLLM,
     OfflineSTT,
@@ -59,10 +66,7 @@ def load_baa_register(path: Path | None = None) -> dict[str, bool]:
         return {}
     with target.open("rb") as fh:
         data = tomllib.load(fh)
-    return {
-        name: bool(entry.get("baa", False))
-        for name, entry in data.get("vendor", {}).items()
-    }
+    return {name: bool(entry.get("baa", False)) for name, entry in data.get("vendor", {}).items()}
 
 
 def build_registry(
@@ -116,9 +120,7 @@ def _bundle(
         telephony=providers.telephony,
         dialog=relay,
     )
-    llm_status = next(
-        (s for s in _build_set(region, baa)[1] if s.leg == "llm"), None
-    )
+    llm_status = next((s for s in _build_set(region, baa)[1] if s.leg == "llm"), None)
     statuses = [
         LegStatus("dialog", relay.name, True, _baa_note("twilio", region, baa)),
     ]
@@ -127,9 +129,7 @@ def _bundle(
     return bundled, statuses
 
 
-def _build_set(
-    region: Region, baa: dict[str, bool]
-) -> tuple[ProviderSet, list[LegStatus]]:
+def _build_set(region: Region, baa: dict[str, bool]) -> tuple[ProviderSet, list[LegStatus]]:
     statuses: list[LegStatus] = []
 
     llm, status = _build_llm(region, baa)
@@ -144,7 +144,7 @@ def _build_set(
     return ProviderSet(stt=stt, llm=llm, tts=tts, telephony=telephony), statuses
 
 
-def _build_llm(region: Region, baa: dict[str, bool]):  # noqa: ANN202
+def _build_llm(region: Region, baa: dict[str, bool]) -> tuple[LLMProvider, LegStatus]:
     if not os.environ.get("ANTHROPIC_API_KEY"):
         return OfflineLLM(), LegStatus("llm", "offline-llm", False, "ANTHROPIC_API_KEY not set")
 
@@ -155,7 +155,7 @@ def _build_llm(region: Region, baa: dict[str, bool]):  # noqa: ANN202
     )
 
 
-def _build_stt(region: Region, baa: dict[str, bool]):  # noqa: ANN202
+def _build_stt(region: Region, baa: dict[str, bool]) -> tuple[STTProvider, LegStatus]:
     if not os.environ.get("DEEPGRAM_API_KEY"):
         return OfflineSTT(), LegStatus("stt", "offline-stt", False, "DEEPGRAM_API_KEY not set")
 
@@ -166,7 +166,7 @@ def _build_stt(region: Region, baa: dict[str, bool]):  # noqa: ANN202
     )
 
 
-def _build_tts(region: Region, baa: dict[str, bool]):  # noqa: ANN202
+def _build_tts(region: Region, baa: dict[str, bool]) -> tuple[TTSProvider, LegStatus]:
     if not os.environ.get("ELEVENLABS_API_KEY"):
         return OfflineTTS(), LegStatus("tts", "offline-tts", False, "ELEVENLABS_API_KEY not set")
 
@@ -177,14 +177,12 @@ def _build_tts(region: Region, baa: dict[str, bool]):  # noqa: ANN202
     )
 
 
-def _build_telephony(region: Region, baa: dict[str, bool]):  # noqa: ANN202
+def _build_telephony(region: Region, baa: dict[str, bool]) -> tuple[TelephonyProvider, LegStatus]:
     # Both halves, not just the SID. Twilio authenticates with the pair, so a
     # SID alone produces a leg that reports LIVE and then fails at the vendor —
     # which is the same misleading shape the doctor's LIVE column had.
     missing = [
-        var
-        for var in ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN")
-        if not os.environ.get(var)
+        var for var in ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN") if not os.environ.get(var)
     ]
     if missing:
         return OfflineTelephony(), LegStatus(

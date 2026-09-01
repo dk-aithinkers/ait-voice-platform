@@ -37,10 +37,15 @@ import json
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from types import TracebackType
+from typing import Any
 
 from ait_voice.core.types import PHI, TenantContext, Utterance
-from ait_voice.providers.base import BAANotConfirmedError, SpeechTiming
+from ait_voice.providers.base import (
+    BAANotConfirmedError,
+    SpeechTiming,
+    WebSocketLike,
+)
 
 #: Twilio's defaults. Both are the vendors this project selected independently,
 #: which is convergence rather than coincidence.
@@ -53,18 +58,6 @@ MSG_PROMPT = "prompt"
 MSG_INTERRUPT = "interrupt"
 MSG_DTMF = "dtmf"
 MSG_ERROR = "error"
-
-
-class WebSocketLike(Protocol):
-    """The slice of a WebSocket this module uses.
-
-    Narrow on purpose: it keeps the transport testable without a live carrier,
-    and keeps a vendor's socket type out of our signatures per the quarantine
-    convention.
-    """
-
-    async def send(self, message: str) -> None: ...
-    def __aiter__(self) -> AsyncIterator[str]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,10 +103,7 @@ def _escape(value: str) -> str:
     one produces malformed TwiML that Twilio rejects mid-call.
     """
     return (
-        value.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
+        value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     )
 
 
@@ -125,9 +115,7 @@ def inbound_twiml(config: RelayConfig) -> str:
     per-tenant configuration can drop it; putting it in TwiML would move that
     guarantee into a template.
     """
-    rendered = " ".join(
-        f'{key}="{_escape(value)}"' for key, value in config.attributes().items()
-    )
+    rendered = " ".join(f'{key}="{_escape(value)}"' for key, value in config.attributes().items())
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
         "<Response><Connect>"
@@ -195,9 +183,7 @@ class ConversationRelaySession:
                 if text:
                     yield Utterance(text=PHI(text), is_final=True)
             elif kind == MSG_INTERRUPT:
-                self.interruptions.append(
-                    float(message.get("durationUntilInterruptMs", 0.0))
-                )
+                self.interruptions.append(float(message.get("durationUntilInterruptMs", 0.0)))
             elif kind == MSG_DTMF:
                 if digit := message.get("digit"):
                     self.digits.append(digit)
@@ -298,7 +284,12 @@ class _suppress_send_errors:
     def __enter__(self) -> None:
         return None
 
-    def __exit__(self, exc_type, exc, tb) -> bool:  # noqa: ANN001
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> bool:
         return exc_type is not None and issubclass(exc_type, (OSError, RuntimeError))
 
 
@@ -315,9 +306,7 @@ class ConversationRelayTransport:
     #: Twilio synthesises downstream; we never see the audio. See SpeechTiming.
     observes_audio = False
 
-    def __init__(
-        self, *, baa_confirmed: bool = False, connect_timeout: float = 30.0
-    ) -> None:
+    def __init__(self, *, baa_confirmed: bool = False, connect_timeout: float = 30.0) -> None:
         self._baa_confirmed = baa_confirmed
         self._connect_timeout = connect_timeout
         self._pending: asyncio.Queue[WebSocketLike] = asyncio.Queue()
@@ -338,14 +327,10 @@ class ConversationRelayTransport:
         """Hand a newly connected Twilio socket to the next waiting call."""
         await self._pending.put(socket)
 
-    async def open(
-        self, tenant: TenantContext, call_id: str
-    ) -> ConversationRelaySession:
+    async def open(self, tenant: TenantContext, call_id: str) -> ConversationRelaySession:
         self._check_baa(tenant)
         try:
-            socket = await asyncio.wait_for(
-                self._pending.get(), timeout=self._connect_timeout
-            )
+            socket = await asyncio.wait_for(self._pending.get(), timeout=self._connect_timeout)
         except TimeoutError:
             # Waiting forever here is the failure mode that wastes an
             # afternoon: the command simply hangs with no output.
@@ -357,9 +342,7 @@ class ConversationRelayTransport:
             ) from None
         return ConversationRelaySession(socket, tenant)
 
-    def session_for(
-        self, socket: WebSocketLike, tenant: TenantContext
-    ) -> ConversationRelaySession:
+    def session_for(self, socket: WebSocketLike, tenant: TenantContext) -> ConversationRelaySession:
         """Build a session directly from a socket, bypassing the queue.
 
         For a server that already knows which tenant a connection belongs to,

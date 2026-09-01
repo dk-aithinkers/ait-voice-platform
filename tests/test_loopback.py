@@ -80,9 +80,7 @@ class TestPacing:
 
     async def test_gap_is_mulaw_silence_not_zero_bytes(self) -> None:
         """0x00 is full-scale negative in mu-law — a loud tone, not silence."""
-        telephony = LoopbackTelephony(
-            [b"\x01" * FRAME_BYTES], gap_seconds=0.1, realtime=False
-        )
+        telephony = LoopbackTelephony([b"\x01" * FRAME_BYTES], gap_seconds=0.1, realtime=False)
         inbound, _ = await telephony.stream(_tenant(), "c-3")
 
         payload = b"".join([f async for f in inbound])
@@ -92,9 +90,7 @@ class TestPacing:
         assert b"\x00" * 100 not in payload
 
     async def test_trailing_silence_lets_the_last_utterance_endpoint(self) -> None:
-        telephony = LoopbackTelephony(
-            [b"\x01" * FRAME_BYTES], gap_seconds=0.0, realtime=False
-        )
+        telephony = LoopbackTelephony([b"\x01" * FRAME_BYTES], gap_seconds=0.0, realtime=False)
         inbound, _ = await telephony.stream(_tenant(), "c-4")
 
         payload = b"".join([f async for f in inbound])

@@ -110,8 +110,9 @@ def _doctor(verify: bool = False) -> int:
 
     print()
     print(f"  .env               {'loaded' if loaded else 'not found'}")
-    print(f"  BAA register       {len(baa)} vendors listed, "
-          f"{sum(baa.values())} with a confirmed BAA")
+    print(
+        f"  BAA register       {len(baa)} vendors listed, {sum(baa.values())} with a confirmed BAA"
+    )
     print()
     print("  provider legs")
     print("  ------------------------------------------------------------------")

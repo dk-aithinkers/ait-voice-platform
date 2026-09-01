@@ -10,6 +10,8 @@ from __future__ import annotations
 import os
 from datetime import UTC, datetime, timedelta
 
+from fastapi import FastAPI
+
 from ait_voice.api.app import Services, create_app
 from ait_voice.api.auth import Principal, Role
 from ait_voice.core.handoff import (
@@ -32,13 +34,15 @@ from ait_voice.core.tenancy import OutOfHoursPolicy, StaffedHours, TenantConfig
 from ait_voice.core.types import PHI, Region
 
 DEMO_TRANSCRIPT = (
-    (Speaker.AGENT, "You're speaking with an AI assistant at Northside Medical, "
-                    "and this call is recorded. How can I help?"),
+    (
+        Speaker.AGENT,
+        "You're speaking with an AI assistant at Northside Medical, "
+        "and this call is recorded. How can I help?",
+    ),
     (Speaker.CALLER, "Hi, I need to move my appointment next week."),
     (Speaker.AGENT, "Of course. Can I take your date of birth?"),
     (Speaker.CALLER, "Fourth of March, nineteen eighty-five."),
-    (Speaker.AGENT, "Thank you. I have you on Tuesday at ten thirty. "
-                    "What would suit you better?"),
+    (Speaker.AGENT, "Thank you. I have you on Tuesday at ten thirty. What would suit you better?"),
 )
 
 
@@ -74,8 +78,7 @@ def build_demo() -> Services:
     north = services.tenants.resolve("northside")
     seed = [
         ("call-001", 45, CallOutcome.APPOINTMENT_BOOKED, "+15551110041", 130.0, 4, None),
-        ("call-002", 120, CallOutcome.ESCALATED, "+15551110072", 38.0, 1,
-         "caller_requested_human"),
+        ("call-002", 120, CallOutcome.ESCALATED, "+15551110072", 38.0, 1, "caller_requested_human"),
         ("call-003", 300, CallOutcome.APPOINTMENT_RESCHEDULED, "+15551110019", 96.0, 3, None),
         ("call-004", 900, CallOutcome.ESCALATED, "+15551110088", 22.0, 1, "clinical_content"),
         ("call-005", 1500, CallOutcome.MESSAGE_TAKEN, "+15551110055", 74.0, 3, None),
@@ -142,8 +145,13 @@ def build_demo() -> Services:
         )
         try:
             services.calendar.book(
-                north, services.tenants.get("northside"), hours, slot,
-                call_id="call-001", caller_ref="caller-demo", now=now,
+                north,
+                services.tenants.get("northside"),
+                hours,
+                slot,
+                call_id="call-001",
+                caller_ref="caller-demo",
+                now=now,
             )
         except SlotUnavailable:
             # A weekend or out-of-hours slot simply is not offered. Only this
@@ -192,9 +200,7 @@ def build_demo() -> Services:
     ):
         if session.capture(field_name, answer):
             session.confirm(field_name)
-    services.intake.add(
-        north, session.completed(call_id="call-001", tenant_id="northside")
-    )
+    services.intake.add(north, session.completed(call_id="call-001", tenant_id="northside"))
 
     services.principals.issue(
         Principal(
@@ -216,5 +222,5 @@ def build_demo() -> Services:
     return services
 
 
-def demo_app():  # noqa: ANN201 - FastAPI
+def demo_app() -> FastAPI:
     return create_app(build_demo(), cors_origins=["http://localhost:5173"])

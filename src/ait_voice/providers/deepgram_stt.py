@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import os
 from collections.abc import AsyncIterator
+from typing import Any
 
 from ait_voice.core.types import PHI, TenantContext, Utterance
 from ait_voice.providers.base import BAANotConfirmedError
@@ -80,7 +81,7 @@ class DeepgramSTT:
         client = AsyncLiveClient(self._api_key)
         queue: asyncio.Queue[Utterance | None] = asyncio.Queue()
 
-        async def on_transcript(_self, result, **_kwargs) -> None:  # noqa: ANN001
+        async def on_transcript(_self: Any, result: Any, **_kwargs: Any) -> None:
             alternatives = result.channel.alternatives
             if not alternatives:
                 return
@@ -95,7 +96,7 @@ class DeepgramSTT:
                 )
             )
 
-        async def on_close(_self, **_kwargs) -> None:  # noqa: ANN001
+        async def on_close(_self: Any, **_kwargs: Any) -> None:
             await queue.put(None)
 
         client.on("Results", on_transcript)

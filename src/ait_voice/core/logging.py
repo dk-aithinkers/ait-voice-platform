@@ -148,9 +148,7 @@ def configure_logging(level: str | None = None) -> None:
     resolved = (level or os.environ.get("AIT_LOG_LEVEL") or "INFO").upper()
 
     handler = logging.StreamHandler()
-    handler.setFormatter(
-        _FieldFormatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s")
-    )
+    handler.setFormatter(_FieldFormatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s"))
 
     root = logging.getLogger()
     root.handlers.clear()

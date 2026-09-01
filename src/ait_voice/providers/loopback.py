@@ -46,10 +46,7 @@ async def render_caller_audio(
     """Synthesise each caller line up front. One audio blob per line."""
     rendered: list[bytes] = []
     for line in script:
-        chunks = [
-            chunk
-            async for chunk in tts.synthesize(tenant, Utterance(text=PHI(line)))
-        ]
+        chunks = [chunk async for chunk in tts.synthesize(tenant, Utterance(text=PHI(line)))]
         rendered.append(b"".join(chunks))
     return rendered
 

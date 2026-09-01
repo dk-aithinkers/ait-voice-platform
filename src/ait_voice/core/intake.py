@@ -47,18 +47,53 @@ from ait_voice.core.types import PHI, TenantContext
 EARLIEST_BIRTH_YEAR = 1900
 
 _MONTHS = (
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
 )
 
 _ONES = (
-    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight",
-    "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
-    "sixteen", "seventeen", "eighteen", "nineteen",
+    "zero",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+    "eleven",
+    "twelve",
+    "thirteen",
+    "fourteen",
+    "fifteen",
+    "sixteen",
+    "seventeen",
+    "eighteen",
+    "nineteen",
 )
 _TENS = (
-    "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy",
-    "eighty", "ninety",
+    "",
+    "",
+    "twenty",
+    "thirty",
+    "forty",
+    "fifty",
+    "sixty",
+    "seventy",
+    "eighty",
+    "ninety",
 )
 
 
@@ -122,12 +157,37 @@ def _spoken_year(year: int) -> str:
 #: goes to a speech synthesiser, and "4th" is one vendor's normalisation away
 #: from "four th". Words leave nothing to interpret.
 _ORDINALS = (
-    "", "first", "second", "third", "fourth", "fifth", "sixth", "seventh",
-    "eighth", "ninth", "tenth", "eleventh", "twelfth", "thirteenth",
-    "fourteenth", "fifteenth", "sixteenth", "seventeenth", "eighteenth",
-    "nineteenth", "twentieth", "twenty-first", "twenty-second",
-    "twenty-third", "twenty-fourth", "twenty-fifth", "twenty-sixth",
-    "twenty-seventh", "twenty-eighth", "twenty-ninth", "thirtieth",
+    "",
+    "first",
+    "second",
+    "third",
+    "fourth",
+    "fifth",
+    "sixth",
+    "seventh",
+    "eighth",
+    "ninth",
+    "tenth",
+    "eleventh",
+    "twelfth",
+    "thirteenth",
+    "fourteenth",
+    "fifteenth",
+    "sixteenth",
+    "seventeenth",
+    "eighteenth",
+    "nineteenth",
+    "twentieth",
+    "twenty-first",
+    "twenty-second",
+    "twenty-third",
+    "twenty-fourth",
+    "twenty-fifth",
+    "twenty-sixth",
+    "twenty-seventh",
+    "twenty-eighth",
+    "twenty-ninth",
+    "thirtieth",
     "thirty-first",
 )
 
@@ -143,10 +203,7 @@ def speak_date(value: date) -> str:
     identical and sound nothing alike, and a transposed day and month is the
     most common intake error there is.
     """
-    return (
-        f"the {_ordinal(value.day)} of {_MONTHS[value.month - 1]}, "
-        f"{_spoken_year(value.year)}"
-    )
+    return f"the {_ordinal(value.day)} of {_MONTHS[value.month - 1]}, {_spoken_year(value.year)}"
 
 
 def speak_digits(value: str) -> str:
@@ -285,9 +342,7 @@ class Capture:
 class IntakeSession:
     """Capture during one call. Nothing here is stored until it is confirmed."""
 
-    def __init__(
-        self, fields: tuple[FieldSpec, ...] = FIELDS, *, max_attempts: int = 3
-    ) -> None:
+    def __init__(self, fields: tuple[FieldSpec, ...] = FIELDS, *, max_attempts: int = 3) -> None:
         self._fields = fields
         self._max_attempts = max_attempts
         self._captures: dict[FieldName, Capture] = {}
@@ -328,11 +383,7 @@ class IntakeSession:
 
         value = spec.validate(raw)
 
-        status = (
-            CaptureStatus.PENDING
-            if spec.requires_confirmation
-            else CaptureStatus.CONFIRMED
-        )
+        status = CaptureStatus.PENDING if spec.requires_confirmation else CaptureStatus.CONFIRMED
         self._captures[name] = Capture(
             field=name, value=PHI(value), status=status, attempts=attempts
         )
@@ -380,8 +431,7 @@ class IntakeSession:
 
     def is_complete(self) -> bool:
         return all(
-            self._captures.get(spec.name) is not None
-            and self._captures[spec.name].is_confirmed
+            self._captures.get(spec.name) is not None and self._captures[spec.name].is_confirmed
             for spec in self._fields
             if spec.required
         )
@@ -405,9 +455,7 @@ class IntakeSession:
                 "by the caller (FR3.2)"
             )
         missing = [
-            spec.name
-            for spec in self._fields
-            if spec.required and spec.name not in self.confirmed
+            spec.name for spec in self._fields if spec.required and spec.name not in self.confirmed
         ]
         if missing:
             raise UnconfirmedIdentifier(
@@ -459,9 +507,7 @@ class IntakeRecord:
         rendered: dict[str, str] = {}
         for name, wrapped in self.values.items():
             value = wrapped.reveal()
-            rendered[str(name)] = (
-                value.isoformat() if isinstance(value, date) else str(value)
-            )
+            rendered[str(name)] = value.isoformat() if isinstance(value, date) else str(value)
         return rendered
 
 
@@ -481,15 +527,13 @@ class IntakeStore:
         return [r for r in self._records.values(tenant) if r.call_id == call_id]
 
     def recent(self, tenant: TenantContext, *, limit: int = 50) -> list[IntakeRecord]:
-        return sorted(
-            self._records.values(tenant), key=lambda r: r.captured_at, reverse=True
-        )[:limit]
+        return sorted(self._records.values(tenant), key=lambda r: r.captured_at, reverse=True)[
+            :limit
+        ]
 
     def erase(self, tenant: TenantContext, intake_id: str) -> bool:
         """DPDP erasure. Intake is content, and content is erasable."""
         return self._records.delete(tenant, intake_id)
 
     def __iter__(self) -> Iterator[str]:
-        raise TypeError(
-            "IntakeStore is not iterable without tenant context. Use recent(tenant)."
-        )
+        raise TypeError("IntakeStore is not iterable without tenant context. Use recent(tenant).")

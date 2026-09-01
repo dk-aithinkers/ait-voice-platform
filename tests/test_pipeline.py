@@ -74,9 +74,7 @@ class TestDisclosure:
             ),
         )
 
-        await VoicePipeline(registry, clinic_name="Northside").handle_call(
-            _tenant(), "call-1"
-        )
+        await VoicePipeline(registry, clinic_name="Northside").handle_call(_tenant(), "call-1")
 
         assert spoken, "nothing was spoken"
         first = spoken[0].lower()
@@ -154,15 +152,13 @@ class TestRegionRouting:
             tts=OfflineTTS(),
             telephony=OfflineTelephony(),
         )
-        india.stt.name = "india-stt"  # type: ignore[attr-defined]
+        india.stt.name = "india-stt"
 
         registry.register(Region.US, us)
         registry.register(Region.INDIA, india)
 
         us_result = await VoicePipeline(registry).handle_call(_tenant(Region.US), "c-us")
-        in_result = await VoicePipeline(registry).handle_call(
-            _tenant(Region.INDIA), "c-in"
-        )
+        in_result = await VoicePipeline(registry).handle_call(_tenant(Region.INDIA), "c-in")
 
         assert us_result.providers["stt"] == "offline-stt"
         assert in_result.providers["stt"] == "india-stt"
@@ -312,15 +308,14 @@ class TestTenantConfigDrivesTheCall:
             tenant_id="clinic-1",
             region=Region.US,
             clinic_name="Northside",
-            staffed_hours=StaffedHours(days=frozenset(range(1, 8)), opens=time(0, 0),
-                                       closes=time(23, 59)),
+            staffed_hours=StaffedHours(
+                days=frozenset(range(1, 8)), opens=time(0, 0), closes=time(23, 59)
+            ),
             escalation_number="+15551230000",
         )
         registry = _registry(Region.US, ["Can I speak to a person please?"])
 
-        result = await VoicePipeline(registry, config=config).handle_call(
-            config.context(), "c-10"
-        )
+        result = await VoicePipeline(registry, config=config).handle_call(config.context(), "c-10")
 
         assert result.escalated
         assert result.escalation_route == "+15551230000"
@@ -336,9 +331,7 @@ class TestTenantConfigDrivesTheCall:
         )
         registry = _registry(Region.US, ["Can I speak to a person please?"])
 
-        result = await VoicePipeline(registry, config=config).handle_call(
-            config.context(), "c-11"
-        )
+        result = await VoicePipeline(registry, config=config).handle_call(config.context(), "c-11")
 
         assert result.escalation_route == "take_message"
 
@@ -375,18 +368,14 @@ class TestRecoveryThenEscalate:
     async def test_the_first_failure_is_a_recovery_attempt_not_an_escalation(
         self,
     ) -> None:
-        result = await VoicePipeline(self._confused_registry(1)).handle_call(
-            _tenant(), "c-r1"
-        )
+        result = await VoicePipeline(self._confused_registry(1)).handle_call(_tenant(), "c-r1")
 
         assert result.recovery_attempted
         assert not result.escalated
 
     async def test_the_second_failure_escalates(self) -> None:
         """A second attempt is where a caller decides the thing is broken."""
-        result = await VoicePipeline(self._confused_registry(2)).handle_call(
-            _tenant(), "c-r2"
-        )
+        result = await VoicePipeline(self._confused_registry(2)).handle_call(_tenant(), "c-r2")
 
         assert result.escalated
         assert result.escalation_reason == str(ESCALATE_NOT_UNDERSTOOD)
@@ -424,9 +413,7 @@ class TestNeverEndsUnresolved:
         """Running out of turns is the agent's problem, not the caller's."""
         registry = _registry(Region.US, ["hello"] * 6)
 
-        result = await VoicePipeline(registry).handle_call(
-            _tenant(), "c-e3", max_turns=2
-        )
+        result = await VoicePipeline(registry).handle_call(_tenant(), "c-e3", max_turns=2)
 
         assert result.escalated
         assert result.ending is CallEnding.ESCALATED
@@ -470,9 +457,7 @@ class TestHandoffCarriesContext:
     one thing that earns acceptance."""
 
     async def test_the_briefing_carries_what_the_caller_said(self) -> None:
-        registry = _registry(
-            Region.US, ["I've had chest pain since this morning"]
-        )
+        registry = _registry(Region.US, ["I've had chest pain since this morning"])
 
         result = await VoicePipeline(registry).handle_call(_tenant(), "c-h1")
 
@@ -508,9 +493,7 @@ class TestHandoffCarriesContext:
 
         from ait_voice.core.tenancy import OutOfHoursPolicy, StaffedHours
 
-        always = StaffedHours(
-            days=frozenset(range(1, 8)), opens=clock(0, 0), closes=clock(23, 59)
-        )
+        always = StaffedHours(days=frozenset(range(1, 8)), opens=clock(0, 0), closes=clock(23, 59))
         for hours, expected in (
             (always, "transferred"),
             (StaffedHours.never(), "message_taken"),

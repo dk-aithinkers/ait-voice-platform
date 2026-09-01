@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
+from typing import Any
 
 import pytest
 
@@ -39,18 +40,14 @@ def _tenant(region: Region = Region.INDIA) -> TenantContext:
 class FakeSocket:
     """A Twilio WebSocket, scripted."""
 
-    def __init__(self, incoming: list[dict] | None = None) -> None:
+    def __init__(self, incoming: list[dict[str, Any]] | None = None) -> None:
         self.incoming = incoming or []
-        self.sent: list[dict] = []
+        self.sent: list[dict[str, Any]] = []
 
     async def send(self, message: str) -> None:
         self.sent.append(json.loads(message))
 
-    async def __aiter__(self) -> AsyncIterator[str]:
-        for message in self.incoming:
-            yield json.dumps(message)
-
-    def __aiter__(self) -> AsyncIterator[str]:  # noqa: F811
+    def __aiter__(self) -> AsyncIterator[str]:
         async def gen() -> AsyncIterator[str]:
             for message in self.incoming:
                 yield json.dumps(message)
@@ -58,7 +55,7 @@ class FakeSocket:
         return gen()
 
 
-def _prompt(text: str, *, last: bool = True) -> dict:
+def _prompt(text: str, *, last: bool = True) -> dict[str, Any]:
     return {"type": "prompt", "voicePrompt": text, "lang": "en-US", "last": last}
 
 
@@ -138,8 +135,11 @@ class TestListening:
     async def test_interruptions_and_digits_are_kept(self) -> None:
         socket = FakeSocket(
             [
-                {"type": "interrupt", "utteranceUntilInterrupt": "Sure, I can",
-                 "durationUntilInterruptMs": 420},
+                {
+                    "type": "interrupt",
+                    "utteranceUntilInterrupt": "Sure, I can",
+                    "durationUntilInterruptMs": 420,
+                },
                 {"type": "dtmf", "digit": "3"},
                 _prompt("actually a person please"),
             ]
@@ -343,14 +343,15 @@ class TestPolicyIsIdentical:
         registry.register(
             Region.INDIA,
             ProviderSet(
-                stt=OfflineSTT(), llm=OfflineLLM(), tts=OfflineTTS(),
-                telephony=OfflineTelephony(), dialog=transport,
+                stt=OfflineSTT(),
+                llm=OfflineLLM(),
+                tts=OfflineTTS(),
+                telephony=OfflineTelephony(),
+                dialog=transport,
             ),
         )
 
-        await VoicePipeline(registry, clinic_name="Northside").handle_call(
-            _tenant(), "c-d"
-        )
+        await VoicePipeline(registry, clinic_name="Northside").handle_call(_tenant(), "c-d")
 
         first_spoken = socket.sent[0]["token"].lower()
         assert "ai assistant" in first_spoken
@@ -359,9 +360,7 @@ class TestPolicyIsIdentical:
 
     async def test_a_relayed_run_is_marked_as_unmeasurable(self) -> None:
         """Without this flag the bundle reads as faster than it is."""
-        relayed = await VoicePipeline(self._relay_registry(["hello"])).handle_call(
-            _tenant(), "c-r"
-        )
+        relayed = await VoicePipeline(self._relay_registry(["hello"])).handle_call(_tenant(), "c-r")
         cascaded = await VoicePipeline(self._cascaded_registry(["hello"])).handle_call(
             _tenant(), "c-c"
         )
@@ -373,9 +372,7 @@ class TestPolicyIsIdentical:
         self,
     ) -> None:
         """The provenance record must not claim vendors that never ran."""
-        relayed = await VoicePipeline(self._relay_registry(["hello"])).handle_call(
-            _tenant(), "c-p"
-        )
+        relayed = await VoicePipeline(self._relay_registry(["hello"])).handle_call(_tenant(), "c-p")
 
         assert relayed.providers["dialog"] == "twilio-conversationrelay"
         assert "stt" not in relayed.providers

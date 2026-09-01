@@ -20,6 +20,10 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator
 
+# The vendor SDK's own types stop at this boundary — which is the point
+# of having one. `Any` is confined to this file and its siblings.
+from typing import Any
+
 from ait_voice.core.types import TenantContext, Utterance
 from ait_voice.providers.base import BAANotConfirmedError
 
@@ -48,9 +52,9 @@ class ElevenLabsTTS:
         self._voice_id = voice_id
         self._model = model
         self._baa_confirmed = baa_confirmed
-        self._client = None
+        self._client: Any | None = None
 
-    def _get_client(self):  # noqa: ANN202 - vendor type stays inside the boundary
+    def _get_client(self) -> Any:
         if self._client is None:
             from elevenlabs.client import AsyncElevenLabs
 

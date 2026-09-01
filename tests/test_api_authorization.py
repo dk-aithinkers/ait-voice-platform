@@ -37,9 +37,7 @@ PARKCLINIC = "parkclinic"
 @pytest.fixture
 def services() -> Services:
     tenants = TenantStore()
-    tenants.add(
-        TenantConfig(tenant_id=NORTHSIDE, region=Region.US, clinic_name="Northside")
-    )
+    tenants.add(TenantConfig(tenant_id=NORTHSIDE, region=Region.US, clinic_name="Northside"))
     tenants.add(
         TenantConfig(
             tenant_id=PARKCLINIC,
@@ -84,9 +82,7 @@ def services() -> Services:
 @pytest.fixture
 def tokens(services: Services) -> dict[str, str]:
     return {
-        "operator": services.principals.issue(
-            Principal(principal_id="op", role=Role.OPERATOR)
-        ),
+        "operator": services.principals.issue(Principal(principal_id="op", role=Role.OPERATOR)),
         "northside": services.principals.issue(
             Principal(principal_id="c1", role=Role.CLINIC, tenant_id=NORTHSIDE)
         ),
@@ -111,9 +107,7 @@ class TestCrossTenantAccessOverHTTP:
     def test_a_clinic_cannot_read_another_clinics_calls(
         self, client: TestClient, tokens: dict[str, str]
     ) -> None:
-        response = client.get(
-            f"/api/calls?tenant={PARKCLINIC}", headers=_auth(tokens["northside"])
-        )
+        response = client.get(f"/api/calls?tenant={PARKCLINIC}", headers=_auth(tokens["northside"]))
 
         assert response.status_code == 403
         assert PARKCLINIC in response.json()["detail"]
@@ -122,9 +116,7 @@ class TestCrossTenantAccessOverHTTP:
         self, client: TestClient, tokens: dict[str, str]
     ) -> None:
         """Quietly serving their own data would hide an attempt worth noticing."""
-        response = client.get(
-            f"/api/calls?tenant={PARKCLINIC}", headers=_auth(tokens["northside"])
-        )
+        response = client.get(f"/api/calls?tenant={PARKCLINIC}", headers=_auth(tokens["northside"]))
         assert response.status_code == 403
         assert not isinstance(response.json(), list)
 
@@ -140,9 +132,7 @@ class TestCrossTenantAccessOverHTTP:
         self, client: TestClient, tokens: dict[str, str]
     ) -> None:
         """404 rather than 403 — 403 would confirm the id exists somewhere."""
-        response = client.get(
-            "/api/calls/call-park-1", headers=_auth(tokens["northside"])
-        )
+        response = client.get("/api/calls/call-park-1", headers=_auth(tokens["northside"]))
         assert response.status_code == 404
 
     def test_a_clinic_cannot_read_another_clinics_messages(
@@ -172,9 +162,7 @@ class TestCrossTenantAccessOverHTTP:
     def test_a_clinic_naming_its_own_tenant_is_allowed(
         self, client: TestClient, tokens: dict[str, str]
     ) -> None:
-        response = client.get(
-            f"/api/calls?tenant={NORTHSIDE}", headers=_auth(tokens["northside"])
-        )
+        response = client.get(f"/api/calls?tenant={NORTHSIDE}", headers=_auth(tokens["northside"]))
         assert response.status_code == 200
 
 
@@ -247,16 +235,12 @@ class TestAuthentication:
         assert client.get("/api/calls", headers=_auth("not-a-token")).status_code == 401
 
     def test_the_failure_says_nothing_about_why(self, client: TestClient) -> None:
-        assert client.get("/api/calls", headers=_auth("x")).json()["detail"] == (
-            "unauthenticated"
-        )
+        assert client.get("/api/calls", headers=_auth("x")).json()["detail"] == ("unauthenticated")
 
     def test_health_needs_no_credential(self, client: TestClient) -> None:
         assert client.get("/api/health").status_code == 200
 
-    def test_me_reports_the_bound_tenant(
-        self, client: TestClient, tokens: dict[str, str]
-    ) -> None:
+    def test_me_reports_the_bound_tenant(self, client: TestClient, tokens: dict[str, str]) -> None:
         body = client.get("/api/me", headers=_auth(tokens["northside"])).json()
         assert body["role"] == "clinic"
         assert body["tenant_id"] == NORTHSIDE
@@ -300,9 +284,7 @@ class TestResolveScope:
 
     def test_an_unknown_tenant_is_refused(self) -> None:
         with pytest.raises(ForbiddenError, match="unknown or inactive"):
-            resolve_scope(
-                Principal(principal_id="op", role=Role.OPERATOR), "ghost", TenantStore()
-            )
+            resolve_scope(Principal(principal_id="op", role=Role.OPERATOR), "ghost", TenantStore())
 
 
 class TestPHIExposure:
@@ -318,9 +300,7 @@ class TestPHIExposure:
     def test_the_detail_view_also_masks_the_number(
         self, client: TestClient, tokens: dict[str, str]
     ) -> None:
-        body = client.get(
-            "/api/calls/call-north-1", headers=_auth(tokens["northside"])
-        ).text
+        body = client.get("/api/calls/call-north-1", headers=_auth(tokens["northside"])).text
         assert "+15551110001" not in body
 
     def test_the_message_queue_masks_the_number_but_shows_the_note(
@@ -397,7 +377,10 @@ class TestAppointmentEndpoints:
             services.tenants.resolve(PARKCLINIC), config, hours, limit=1
         )[0]
         appointment = services.calendar.book(
-            services.tenants.resolve(PARKCLINIC), config, hours, slot,
+            services.tenants.resolve(PARKCLINIC),
+            config,
+            hours,
+            slot,
             caller_ref="caller-park",
         )
         return appointment.appointment_id
@@ -413,12 +396,13 @@ class TestAppointmentEndpoints:
     def test_a_clinic_cannot_see_anothers_diary(
         self, client: TestClient, tokens: dict[str, str], booked: str
     ) -> None:
-        assert client.get(
-            f"/api/appointments?tenant={PARKCLINIC}", headers=_auth(tokens["northside"])
-        ).status_code == 403
-        assert client.get(
-            "/api/appointments", headers=_auth(tokens["northside"])
-        ).json() == []
+        assert (
+            client.get(
+                f"/api/appointments?tenant={PARKCLINIC}", headers=_auth(tokens["northside"])
+            ).status_code
+            == 403
+        )
+        assert client.get("/api/appointments", headers=_auth(tokens["northside"])).json() == []
 
     def test_a_clinic_cannot_cancel_anothers_appointment(
         self, client: TestClient, tokens: dict[str, str], booked: str
@@ -447,32 +431,37 @@ class TestAppointmentEndpoints:
 
         assert response.status_code == 200
         assert response.json()["status"] == "cancelled"
-        assert client.get(
-            f"/api/appointments?tenant={PARKCLINIC}", headers=_auth(tokens["operator"])
-        ).json() == []
+        assert (
+            client.get(
+                f"/api/appointments?tenant={PARKCLINIC}", headers=_auth(tokens["operator"])
+            ).json()
+            == []
+        )
 
     def test_cancelling_an_unknown_appointment_is_a_404(
         self, client: TestClient, tokens: dict[str, str]
     ) -> None:
-        assert client.post(
-            f"/api/appointments/ghost/cancel?tenant={PARKCLINIC}",
-            headers=_auth(tokens["operator"]),
-        ).status_code == 404
+        assert (
+            client.post(
+                f"/api/appointments/ghost/cancel?tenant={PARKCLINIC}",
+                headers=_auth(tokens["operator"]),
+            ).status_code
+            == 404
+        )
 
-    def test_availability_is_scoped_too(
-        self, client: TestClient, tokens: dict[str, str]
-    ) -> None:
-        assert client.get(
-            f"/api/availability?tenant={PARKCLINIC}", headers=_auth(tokens["northside"])
-        ).status_code == 403
+    def test_availability_is_scoped_too(self, client: TestClient, tokens: dict[str, str]) -> None:
+        assert (
+            client.get(
+                f"/api/availability?tenant={PARKCLINIC}", headers=_auth(tokens["northside"])
+            ).status_code
+            == 403
+        )
 
     def test_times_are_returned_in_clinic_local_time_as_well_as_utc(
         self, client: TestClient, tokens: dict[str, str], booked: str
     ) -> None:
         """The clinic reads its diary in its own hours, not in UTC."""
-        [appointment] = client.get(
-            "/api/appointments", headers=_auth(tokens["parkclinic"])
-        ).json()
+        [appointment] = client.get("/api/appointments", headers=_auth(tokens["parkclinic"])).json()
 
         assert appointment["starts_at"].endswith("+00:00")
         assert appointment["local_start"] != appointment["starts_at"]
@@ -489,8 +478,12 @@ class TestAppointmentEndpoints:
             services.tenants.resolve(PARKCLINIC), config, hours, limit=1
         )[0]
         services.calendar.book(
-            services.tenants.resolve(PARKCLINIC), config, hours, slot,
-            patient_name="Priya Sharma", reason="persistent cough",
+            services.tenants.resolve(PARKCLINIC),
+            config,
+            hours,
+            slot,
+            patient_name="Priya Sharma",
+            reason="persistent cough",
         )
 
         body = client.get("/api/appointments", headers=_auth(tokens["parkclinic"])).text
@@ -537,9 +530,7 @@ class TestHandoffEndpoints:
         self, client: TestClient, tokens: dict[str, str], waiting: str
     ) -> None:
         """C-T6 — withholding this is the failure the feature prevents."""
-        body = client.get(
-            f"/api/handoffs/{waiting}", headers=_auth(tokens["parkclinic"])
-        ).json()
+        body = client.get(f"/api/handoffs/{waiting}", headers=_auth(tokens["parkclinic"])).json()
 
         assert body["briefing"]["said"] == ["I've had chest pain since this morning"]
         assert body["briefing"]["caller_number"] == "+919990001111"
@@ -548,19 +539,26 @@ class TestHandoffEndpoints:
         self, client: TestClient, tokens: dict[str, str], waiting: str
     ) -> None:
         """The most sensitive endpoint in the product."""
-        assert client.get(
-            f"/api/handoffs/{waiting}", headers=_auth(tokens["northside"])
-        ).status_code == 404
-        assert client.get(
-            f"/api/handoffs?tenant={PARKCLINIC}", headers=_auth(tokens["northside"])
-        ).status_code == 403
+        assert (
+            client.get(f"/api/handoffs/{waiting}", headers=_auth(tokens["northside"])).status_code
+            == 404
+        )
+        assert (
+            client.get(
+                f"/api/handoffs?tenant={PARKCLINIC}", headers=_auth(tokens["northside"])
+            ).status_code
+            == 403
+        )
 
     def test_a_clinic_cannot_acknowledge_another_clinics_handoff(
         self, client: TestClient, tokens: dict[str, str], waiting: str
     ) -> None:
-        assert client.post(
-            f"/api/handoffs/{waiting}/acknowledge", headers=_auth(tokens["northside"])
-        ).status_code == 404
+        assert (
+            client.post(
+                f"/api/handoffs/{waiting}/acknowledge", headers=_auth(tokens["northside"])
+            ).status_code
+            == 404
+        )
 
     def test_a_clinic_user_may_acknowledge_its_own(
         self, client: TestClient, tokens: dict[str, str], waiting: str
@@ -572,17 +570,13 @@ class TestHandoffEndpoints:
 
         assert response.status_code == 200
         assert response.json()["is_open"] is False
-        assert client.get(
-            "/api/handoffs", headers=_auth(tokens["parkclinic"])
-        ).json() == []
+        assert client.get("/api/handoffs", headers=_auth(tokens["parkclinic"])).json() == []
 
     def test_an_acknowledged_handoff_is_still_readable(
         self, client: TestClient, tokens: dict[str, str], waiting: str
     ) -> None:
         """It is how a clinic learns a handoff went unanswered for two hours."""
-        client.post(
-            f"/api/handoffs/{waiting}/acknowledge", headers=_auth(tokens["parkclinic"])
-        )
+        client.post(f"/api/handoffs/{waiting}/acknowledge", headers=_auth(tokens["parkclinic"]))
 
         history = client.get(
             "/api/handoffs?open_only=false", headers=_auth(tokens["parkclinic"])
@@ -591,15 +585,17 @@ class TestHandoffEndpoints:
         assert len(history) == 1
         assert history[0]["acknowledged_at"]
 
-    def test_an_unknown_handoff_is_a_404(
-        self, client: TestClient, tokens: dict[str, str]
-    ) -> None:
-        assert client.get(
-            "/api/handoffs/ghost", headers=_auth(tokens["parkclinic"])
-        ).status_code == 404
-        assert client.post(
-            "/api/handoffs/ghost/acknowledge", headers=_auth(tokens["parkclinic"])
-        ).status_code == 404
+    def test_an_unknown_handoff_is_a_404(self, client: TestClient, tokens: dict[str, str]) -> None:
+        assert (
+            client.get("/api/handoffs/ghost", headers=_auth(tokens["parkclinic"])).status_code
+            == 404
+        )
+        assert (
+            client.post(
+                "/api/handoffs/ghost/acknowledge", headers=_auth(tokens["parkclinic"])
+            ).status_code
+            == 404
+        )
 
 
 class TestIntakeEndpoints:
@@ -633,9 +629,7 @@ class TestIntakeEndpoints:
     def test_the_detail_reveals_the_confirmed_values(
         self, client: TestClient, tokens: dict[str, str], captured: str
     ) -> None:
-        body = client.get(
-            f"/api/intake/{captured}", headers=_auth(tokens["parkclinic"])
-        ).json()
+        body = client.get(f"/api/intake/{captured}", headers=_auth(tokens["parkclinic"])).json()
 
         assert body["details"]["full_name"] == "Priya Sharma"
         assert body["details"]["date_of_birth"] == "1985-03-04"
@@ -643,20 +637,27 @@ class TestIntakeEndpoints:
     def test_a_clinic_cannot_read_another_clinics_intake(
         self, client: TestClient, tokens: dict[str, str], captured: str
     ) -> None:
-        assert client.get(
-            f"/api/intake/{captured}", headers=_auth(tokens["northside"])
-        ).status_code == 404
-        assert client.get(
-            f"/api/intake?tenant={PARKCLINIC}", headers=_auth(tokens["northside"])
-        ).status_code == 403
+        assert (
+            client.get(f"/api/intake/{captured}", headers=_auth(tokens["northside"])).status_code
+            == 404
+        )
+        assert (
+            client.get(
+                f"/api/intake?tenant={PARKCLINIC}", headers=_auth(tokens["northside"])
+            ).status_code
+            == 403
+        )
 
     def test_a_clinic_user_cannot_erase(
         self, client: TestClient, tokens: dict[str, str], captured: str
     ) -> None:
         """Irreversible, so it needs the role that carries the responsibility."""
-        assert client.post(
-            f"/api/intake/{captured}/erase", headers=_auth(tokens["parkclinic"])
-        ).status_code == 403
+        assert (
+            client.post(
+                f"/api/intake/{captured}/erase", headers=_auth(tokens["parkclinic"])
+            ).status_code
+            == 403
+        )
 
     def test_an_operator_can_erase(
         self, client: TestClient, tokens: dict[str, str], captured: str
@@ -667,10 +668,13 @@ class TestIntakeEndpoints:
         )
 
         assert response.status_code == 200
-        assert client.get(
-            f"/api/intake/{captured}?tenant={PARKCLINIC}",
-            headers=_auth(tokens["operator"]),
-        ).status_code == 404
+        assert (
+            client.get(
+                f"/api/intake/{captured}?tenant={PARKCLINIC}",
+                headers=_auth(tokens["operator"]),
+            ).status_code
+            == 404
+        )
 
     def test_erasing_leaves_the_call_record(
         self, client: TestClient, tokens: dict[str, str], captured: str
@@ -689,7 +693,10 @@ class TestIntakeEndpoints:
     def test_erasing_an_unknown_intake_is_a_404(
         self, client: TestClient, tokens: dict[str, str]
     ) -> None:
-        assert client.post(
-            f"/api/intake/ghost/erase?tenant={PARKCLINIC}",
-            headers=_auth(tokens["operator"]),
-        ).status_code == 404
+        assert (
+            client.post(
+                f"/api/intake/ghost/erase?tenant={PARKCLINIC}",
+                headers=_auth(tokens["operator"]),
+            ).status_code
+            == 404
+        )

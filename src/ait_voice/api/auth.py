@@ -134,9 +134,7 @@ def resolve_scope(
     """
     if principal.role is Role.CLINIC:
         if requested_tenant and requested_tenant != principal.tenant_id:
-            raise ForbiddenError(
-                f"you do not have access to tenant {requested_tenant!r}"
-            )
+            raise ForbiddenError(f"you do not have access to tenant {requested_tenant!r}")
         target = principal.tenant_id
     else:
         if not requested_tenant:

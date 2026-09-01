@@ -54,9 +54,7 @@ class TestBAARegister:
 
 
 class TestBAAGateRefusesUnconfirmedVendors:
-    async def test_llm_refuses_us_tenant_without_baa(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_llm_refuses_us_tenant_without_baa(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
         from ait_voice.providers.anthropic_llm import AnthropicLLM
 
@@ -64,9 +62,7 @@ class TestBAAGateRefusesUnconfirmedVendors:
         with pytest.raises(BAANotConfirmedError, match="clinic-us"):
             await llm.respond(_us(), [Utterance(text=PHI("hi"))], system_prompt="x")
 
-    async def test_stt_refuses_us_tenant_without_baa(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_stt_refuses_us_tenant_without_baa(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DEEPGRAM_API_KEY", "test-key")
         from ait_voice.providers.deepgram_stt import DeepgramSTT
 
@@ -78,9 +74,7 @@ class TestBAAGateRefusesUnconfirmedVendors:
             async for _ in stt.transcribe(_us(), audio()):
                 pass
 
-    async def test_tts_refuses_us_tenant_without_baa(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_tts_refuses_us_tenant_without_baa(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """What the agent says can carry PHI too — a name, an appointment."""
         monkeypatch.setenv("ELEVENLABS_API_KEY", "test-key")
         from ait_voice.providers.elevenlabs_tts import ElevenLabsTTS
@@ -115,9 +109,7 @@ class TestBAAGateRefusesUnconfirmedVendors:
 
 
 class TestRegistryDegradesPerLeg:
-    def test_no_credentials_gives_all_offline(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_no_credentials_gives_all_offline(self, monkeypatch: pytest.MonkeyPatch) -> None:
         for var in (
             "ANTHROPIC_API_KEY",
             "DEEPGRAM_API_KEY",
@@ -157,9 +149,7 @@ class TestRegistryDegradesPerLeg:
 
     def test_confirmed_baa_is_reported(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-        _, statuses = build_registry(
-            regions=[Region.US], baa_register={"anthropic": True}
-        )
+        _, statuses = build_registry(regions=[Region.US], baa_register={"anthropic": True})
         llm = next(s for s in statuses if s.leg == "llm")
         assert llm.reason == "BAA confirmed"
 
@@ -171,9 +161,7 @@ class TestRegistryDegradesPerLeg:
         llm = next(s for s in statuses if s.leg == "llm")
         assert "DPDP" in llm.reason
 
-    def test_both_regions_get_their_own_set(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_both_regions_get_their_own_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         registry, _ = build_registry(regions=[Region.US, Region.INDIA], baa_register={})
         assert registry.regions == [Region.INDIA, Region.US]
@@ -210,9 +198,7 @@ class TestLegStatus:
 
 
 class TestTwilioNeedsBothHalves:
-    def test_a_sid_without_a_token_stays_offline(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_sid_without_a_token_stays_offline(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Twilio authenticates with the pair; a SID alone cannot place a call."""
         monkeypatch.setenv("TWILIO_ACCOUNT_SID", "AC123")
         monkeypatch.delenv("TWILIO_AUTH_TOKEN", raising=False)
@@ -242,9 +228,7 @@ class TestBundledRegionSelection:
             bundled_regions=[Region.INDIA],
         )
 
-        providers = registry.for_tenant(
-            TenantContext(tenant_id="t", region=Region.INDIA)
-        )
+        providers = registry.for_tenant(TenantContext(tenant_id="t", region=Region.INDIA))
         assert providers.is_bundled
         assert providers.dialog.name == "twilio-conversationrelay"
         assert any(s.leg == "dialog" for s in statuses)
@@ -272,9 +256,7 @@ class TestBundledRegionSelection:
 
     def test_no_bundling_by_default(self) -> None:
         registry, _ = build_registry(regions=[Region.US], baa_register={})
-        assert not registry.for_tenant(
-            TenantContext(tenant_id="t", region=Region.US)
-        ).is_bundled
+        assert not registry.for_tenant(TenantContext(tenant_id="t", region=Region.US)).is_bundled
 
     def test_the_bundle_carries_the_baa_verdict(self) -> None:
         _, statuses = build_registry(

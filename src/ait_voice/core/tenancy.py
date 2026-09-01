@@ -30,7 +30,11 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, time
 from enum import StrEnum
-from typing import Generic, TypeVar
+
+# `Any` appears only on **kwargs passthroughs to dataclasses.replace,
+# whose fields are heterogeneous. Narrowing it there would make every
+# call an error without making anything safer.
+from typing import Any, Generic, TypeVar
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ait_voice.core.types import Region, TenantContext
@@ -159,7 +163,7 @@ class TenantConfig:
             outbound_registered=self.outbound_registered,
         )
 
-    def with_changes(self, **changes: object) -> TenantConfig:
+    def with_changes(self, **changes: Any) -> TenantConfig:
         return replace(self, **changes)
 
     def is_staffed(self, when: datetime | None = None) -> bool:
@@ -206,7 +210,7 @@ class TenantStore:
             raise TenantNotFoundError(f"{tenant_id} is not active")
         return config.context()
 
-    def update(self, tenant_id: str, **changes: object) -> TenantConfig:
+    def update(self, tenant_id: str, **changes: Any) -> TenantConfig:
         return self.add(self.get(tenant_id).with_changes(**changes))
 
     def deactivate(self, tenant_id: str) -> TenantConfig:
