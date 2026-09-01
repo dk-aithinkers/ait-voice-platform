@@ -21,6 +21,9 @@ elevenlabs = ["elevenlabs>=1.9"]
 twilio = ["twilio>=9.3", "websockets>=13.0"]
 dev = [
     "httpx>=0.28.1",
+    "mypy>=2.3.1",
+    "pip-audit>=2.10.1",
+    "pre-commit>=4.6.2",
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "pytest-cov>=5.0",
@@ -77,6 +80,8 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S", "T20"]
 "src/ait_voice/cli.py" = ["T20"]  # the CLI is the one place print() is the point
+# The CI gates are command-line tools whose entire output is their report.
+"scripts/**" = ["T20"]
 
 # ---------------------------------------------------------------------------
 # Coverage — per-package BRANCH coverage, not global line coverage.
@@ -90,6 +95,9 @@ ignore = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# So tests can import the CI gates in `scripts/` and check their logic
+# directly rather than only through a subprocess.
+pythonpath = ["."]
 
 [tool.coverage.run]
 branch = true
@@ -106,3 +114,36 @@ show_missing = true
 # there: it binds a socket rather than translating anything, and the handshake
 # contract it depends on is covered in tests/test_provider_contracts.py.
 exclude_also = ["if TYPE_CHECKING:"]
+
+[tool.mypy]
+python_version = "3.14"
+files = ["src", "tests"]
+strict = true
+# Vendor SDKs ship incomplete or absent stubs. Ignoring their *imports* is not
+# the same as ignoring our own types, and the provider boundary means the
+# untyped surface is confined to `providers/`.
+ignore_missing_imports = true
+# Tests are checked, but not to the same standard as `src`, and the difference
+# is deliberate rather than lazy.
+#
+# `src` holds the compliance logic — the tenant boundary, the PHI wrappers, the
+# BAA gate — and is checked under full `strict`. That is where a type error is
+# a disclosure risk.
+#
+# A test, by contrast, frequently passes a deliberately wrong type to assert
+# that it is refused, and reaches through `X | None` after an assertion mypy
+# cannot see. Demanding strictness there makes the suite argue with itself
+# without making the product safer. What stays on is everything that catches a
+# test being wrong about the code: attribute names, call signatures, and
+# argument types are all still checked.
+#
+# `tests/__init__.py` exists so mypy names these `tests.test_x` and this
+# pattern matches — mypy only wildcards whole module components.
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_untyped_calls = false
+disallow_incomplete_defs = false
+warn_return_any = false
+# Reaching through an Optional the test has already established is not-None.
+disable_error_code = ["union-attr", "index"]
