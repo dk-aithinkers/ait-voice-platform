@@ -20,6 +20,7 @@ from ait_voice.core.records import (
     Transcript,
     TranscriptTurn,
 )
+from ait_voice.core.scheduling import BookingHours, SlotUnavailable
 from ait_voice.core.tenancy import OutOfHoursPolicy, StaffedHours, TenantConfig
 from ait_voice.core.types import PHI, Region
 
@@ -45,6 +46,7 @@ def build_demo() -> Services:
             staffed_hours=StaffedHours.weekdays(),
             escalation_number="+15551230000",
             out_of_hours=OutOfHoursPolicy.TAKE_MESSAGE,
+            timezone="America/New_York",
         )
     )
     services.tenants.add(
@@ -57,6 +59,7 @@ def build_demo() -> Services:
             staffed_hours=StaffedHours.never(),
             out_of_hours=OutOfHoursPolicy.EXISTING_AFTER_HOURS,
             outbound_registered=True,
+            timezone="Asia/Kolkata",
         )
     )
 
@@ -122,6 +125,24 @@ def build_demo() -> Services:
             latency_observable=False,
         ),
     )
+    # A few appointments, so the diary is not empty on first run. Booked
+    # through the real calendar rather than inserted, so the demo exercises the
+    # same slot validation a live call would.
+    hours = BookingHours()
+    for days_ahead, hour in ((1, 14), (1, 15), (2, 13), (4, 16)):
+        slot = (now + timedelta(days=days_ahead)).replace(
+            hour=hour, minute=30, second=0, microsecond=0
+        )
+        try:
+            services.calendar.book(
+                north, services.tenants.get("northside"), hours, slot,
+                call_id="call-001", caller_ref="caller-demo", now=now,
+            )
+        except SlotUnavailable:
+            # A weekend or out-of-hours slot simply is not offered. Only this
+            # is expected here; anything else is a real fault and should raise.
+            continue
+
     services.principals.issue(
         Principal(
             principal_id="operator",

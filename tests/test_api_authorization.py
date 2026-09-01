@@ -41,7 +41,12 @@ def services() -> Services:
         TenantConfig(tenant_id=NORTHSIDE, region=Region.US, clinic_name="Northside")
     )
     tenants.add(
-        TenantConfig(tenant_id=PARKCLINIC, region=Region.INDIA, clinic_name="Park")
+        TenantConfig(
+            tenant_id=PARKCLINIC,
+            region=Region.INDIA,
+            clinic_name="Park",
+            timezone="Asia/Kolkata",
+        )
     )
 
     calls = CallStore()
@@ -379,3 +384,116 @@ class TestDemoSeed:
         ).json()
 
         assert calls[0]["latency_observable"] is False
+
+
+class TestAppointmentEndpoints:
+    @pytest.fixture
+    def booked(self, services: Services) -> str:
+        from ait_voice.core.scheduling import BookingHours
+
+        config = services.tenants.get(PARKCLINIC)
+        hours = BookingHours()
+        slot = services.calendar.availability(
+            services.tenants.resolve(PARKCLINIC), config, hours, limit=1
+        )[0]
+        appointment = services.calendar.book(
+            services.tenants.resolve(PARKCLINIC), config, hours, slot,
+            caller_ref="caller-park",
+        )
+        return appointment.appointment_id
+
+    def test_a_clinic_sees_its_own_diary(
+        self, client: TestClient, tokens: dict[str, str], booked: str
+    ) -> None:
+        response = client.get("/api/appointments", headers=_auth(tokens["parkclinic"]))
+
+        assert response.status_code == 200
+        assert [a["appointment_id"] for a in response.json()] == [booked]
+
+    def test_a_clinic_cannot_see_anothers_diary(
+        self, client: TestClient, tokens: dict[str, str], booked: str
+    ) -> None:
+        assert client.get(
+            f"/api/appointments?tenant={PARKCLINIC}", headers=_auth(tokens["northside"])
+        ).status_code == 403
+        assert client.get(
+            "/api/appointments", headers=_auth(tokens["northside"])
+        ).json() == []
+
+    def test_a_clinic_cannot_cancel_anothers_appointment(
+        self, client: TestClient, tokens: dict[str, str], booked: str
+    ) -> None:
+        response = client.post(
+            f"/api/appointments/{booked}/cancel", headers=_auth(tokens["northside"])
+        )
+        assert response.status_code == 403
+
+    def test_the_clinic_surface_cannot_cancel_at_all(
+        self, client: TestClient, tokens: dict[str, str], booked: str
+    ) -> None:
+        """Read-only per the scope document; the agent is what books."""
+        response = client.post(
+            f"/api/appointments/{booked}/cancel", headers=_auth(tokens["parkclinic"])
+        )
+        assert response.status_code == 403
+
+    def test_an_operator_can_cancel(
+        self, client: TestClient, tokens: dict[str, str], booked: str
+    ) -> None:
+        response = client.post(
+            f"/api/appointments/{booked}/cancel?tenant={PARKCLINIC}",
+            headers=_auth(tokens["operator"]),
+        )
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "cancelled"
+        assert client.get(
+            f"/api/appointments?tenant={PARKCLINIC}", headers=_auth(tokens["operator"])
+        ).json() == []
+
+    def test_cancelling_an_unknown_appointment_is_a_404(
+        self, client: TestClient, tokens: dict[str, str]
+    ) -> None:
+        assert client.post(
+            f"/api/appointments/ghost/cancel?tenant={PARKCLINIC}",
+            headers=_auth(tokens["operator"]),
+        ).status_code == 404
+
+    def test_availability_is_scoped_too(
+        self, client: TestClient, tokens: dict[str, str]
+    ) -> None:
+        assert client.get(
+            f"/api/availability?tenant={PARKCLINIC}", headers=_auth(tokens["northside"])
+        ).status_code == 403
+
+    def test_times_are_returned_in_clinic_local_time_as_well_as_utc(
+        self, client: TestClient, tokens: dict[str, str], booked: str
+    ) -> None:
+        """The clinic reads its diary in its own hours, not in UTC."""
+        [appointment] = client.get(
+            "/api/appointments", headers=_auth(tokens["parkclinic"])
+        ).json()
+
+        assert appointment["starts_at"].endswith("+00:00")
+        assert appointment["local_start"] != appointment["starts_at"]
+        assert "spoken" in appointment
+
+    def test_the_diary_carries_no_patient_name(
+        self, client: TestClient, tokens: dict[str, str], services: Services
+    ) -> None:
+        from ait_voice.core.scheduling import BookingHours
+
+        config = services.tenants.get(PARKCLINIC)
+        hours = BookingHours()
+        slot = services.calendar.availability(
+            services.tenants.resolve(PARKCLINIC), config, hours, limit=1
+        )[0]
+        services.calendar.book(
+            services.tenants.resolve(PARKCLINIC), config, hours, slot,
+            patient_name="Priya Sharma", reason="persistent cough",
+        )
+
+        body = client.get("/api/appointments", headers=_auth(tokens["parkclinic"])).text
+
+        assert "Priya" not in body
+        assert "cough" not in body

@@ -31,6 +31,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, time
 from enum import StrEnum
 from typing import Generic, TypeVar
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ait_voice.core.types import Region, TenantContext
 
@@ -80,10 +81,20 @@ class StaffedHours:
     opens: time = time(9, 0)
     closes: time = time(17, 0)
 
-    def is_staffed(self, when: datetime) -> bool:
-        if when.isoweekday() not in self.days:
+    def is_staffed(self, when: datetime, *, tz: ZoneInfo | None = None) -> bool:
+        """Whether someone is available at this moment, in the clinic's own time.
+
+        The conversion is the whole point. Staffed hours are written the way a
+        clinic says them — "nine to five" — which is nine to five *there*.
+        Comparing a UTC instant against those numbers puts a US clinic's front
+        desk five to eight hours away from where it actually is, and once
+        appointments are being booked that is not a display bug, it is a patient
+        told to arrive at half past five in the morning.
+        """
+        local = when.astimezone(tz) if tz else when
+        if local.isoweekday() not in self.days:
             return False
-        return self.opens <= when.time() < self.closes
+        return self.opens <= local.time() < self.closes
 
     @classmethod
     def weekdays(cls, opens: time = time(9, 0), closes: time = time(17, 0)) -> StaffedHours:
@@ -113,6 +124,9 @@ class TenantConfig:
     escalation_number: str | None = None
     out_of_hours: OutOfHoursPolicy = OutOfHoursPolicy.TAKE_MESSAGE
     languages: tuple[str, ...] = ("en",)
+    #: IANA zone. Staffed hours and appointment times are read in this zone;
+    #: everything is stored as an absolute instant.
+    timezone: str = "UTC"
     #: DLT registration and 1600-series numbering, for India outbound (C-R6).
     outbound_registered: bool = False
     active: bool = True
@@ -122,6 +136,20 @@ class TenantConfig:
             raise ValueError("tenant_id must not be empty")
         if not self.languages:
             raise ValueError("at least one language is required")
+        try:
+            ZoneInfo(self.timezone)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            # Rejected at construction rather than at the first booking, when
+            # the consequence is a patient given the wrong hour.
+            raise ValueError(f"unknown timezone {self.timezone!r}") from exc
+
+    @property
+    def tz(self) -> ZoneInfo:
+        return ZoneInfo(self.timezone)
+
+    def local(self, when: datetime | None = None) -> datetime:
+        """An instant expressed in the clinic's own time."""
+        return (when or datetime.now(UTC)).astimezone(self.tz)
 
     def context(self) -> TenantContext:
         """The context passed to everything that touches this tenant's data."""
@@ -135,7 +163,7 @@ class TenantConfig:
         return replace(self, **changes)
 
     def is_staffed(self, when: datetime | None = None) -> bool:
-        return self.staffed_hours.is_staffed(when or datetime.now(UTC))
+        return self.staffed_hours.is_staffed(when or datetime.now(UTC), tz=self.tz)
 
     def escalation_route(self, when: datetime | None = None) -> OutOfHoursPolicy | str:
         """Where an escalation goes right now.

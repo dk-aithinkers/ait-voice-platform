@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { duration, percent } from "../format";
 import { CallTable } from "../components/CallTable";
+import { AppointmentTable } from "../components/AppointmentTable";
 import { ErrorNote, Loading, Tile } from "../components/Common";
 
 /**
@@ -26,6 +27,10 @@ export function ClinicView({ tenant }: { tenant?: string | null }): ReactNode {
   const calls = useQuery({
     queryKey: ["calls", tenant],
     queryFn: () => api.calls(tenant),
+  });
+  const appointments = useQuery({
+    queryKey: ["appointments", tenant],
+    queryFn: () => api.appointments(tenant),
   });
 
   if (clinic.isError) return <ErrorNote error={clinic.error} />;
@@ -87,6 +92,13 @@ export function ClinicView({ tenant }: { tenant?: string | null }): ReactNode {
               any figure would be invented.
             </p>
           </>
+        ) : null}
+
+        <h2>Upcoming appointments</h2>
+        {appointments.isLoading ? <Loading what="appointments" /> : null}
+        {appointments.isError ? <ErrorNote error={appointments.error} /> : null}
+        {appointments.data ? (
+          <AppointmentTable appointments={appointments.data} />
         ) : null}
 
         <h2>Recent calls</h2>

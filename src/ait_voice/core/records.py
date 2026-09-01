@@ -105,6 +105,10 @@ class CallRecord:
     #: measurement. Carried through to the UI rather than dropped.
     latency_observable: bool = True
     has_transcript: bool = False
+    #: The appointment this call created or changed, if any. An id rather than
+    #: an embedded record: the appointment has its own lifetime and can be
+    #: moved or cancelled long after the call ended.
+    appointment_id: str | None = None
 
     @property
     def caller_masked(self) -> str:
@@ -129,6 +133,7 @@ class CallRecord:
             "has_transcript": self.has_transcript,
             "p95_ms": round(self.p95_ms, 1) if self.p95_ms is not None else None,
             "latency_observable": self.latency_observable,
+            "appointment_id": self.appointment_id,
         }
 
 

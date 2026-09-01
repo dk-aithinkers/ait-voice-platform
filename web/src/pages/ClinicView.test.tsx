@@ -3,7 +3,12 @@ import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { ClinicView } from "./ClinicView";
-import type { ActivitySummary, CallSummary, Clinic } from "../types";
+import type {
+  ActivitySummary,
+  Appointment,
+  CallSummary,
+  Clinic,
+} from "../types";
 
 const clinic: Clinic = {
   tenant_id: "northside",
@@ -43,6 +48,20 @@ const calls: CallSummary[] = [
     has_transcript: true,
     p95_ms: 860,
     latency_observable: true,
+    appointment_id: "appt-1",
+  },
+];
+
+const appointments: Appointment[] = [
+  {
+    appointment_id: "appt-1",
+    starts_at: "2026-09-02T14:30:00+00:00",
+    local_start: "2026-09-02T10:30:00-04:00",
+    spoken: "Wednesday 2 September at 10:30 am",
+    duration_minutes: 30,
+    status: "booked",
+    call_id: "c-1",
+    rescheduled_from: null,
   },
 ];
 
@@ -54,6 +73,7 @@ vi.mock("../api", async () => {
       clinic: () => Promise.resolve(clinic),
       summary: () => Promise.resolve(summary),
       calls: () => Promise.resolve(calls),
+      appointments: () => Promise.resolve(appointments),
     },
   };
 });
@@ -128,6 +148,23 @@ describe("clinic view", () => {
     expect(container.textContent).not.toMatch(/\+1555\d{6,}/);
   });
 
+  it("shows the diary in clinic-local time, not the browser's zone", async () => {
+    // The server sends 14:30 UTC as 10:30-04:00. A New York clinic must read
+    // 10:30 whatever the receptionist's laptop is set to.
+    renderView();
+    expect(await screen.findByText(/10:30/)).toBeInTheDocument();
+  });
+
+  it("shows no patient name in the diary", async () => {
+    // A diary left open at a front desk is the most exposed surface here, so
+    // the server sends times without identities.
+    const { container } = renderView();
+    await screen.findByText(/10:30/);
+
+    const diary = container.querySelectorAll("table")[0]?.textContent ?? "";
+    expect(diary).not.toMatch(/priya|sharma/i);
+  });
+
   it("uses one h1 and h2 section headings", async () => {
     renderView();
     await screen.findByText("12");
@@ -135,6 +172,7 @@ describe("clinic view", () => {
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     const h2s = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
     expect(h2s).toContain("Last 7 days");
+    expect(h2s).toContain("Upcoming appointments");
     expect(h2s).toContain("Recent calls");
   });
 });

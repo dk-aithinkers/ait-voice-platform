@@ -23,6 +23,39 @@ export function dayAndTime(iso: string): string {
   });
 }
 
+/**
+ * An appointment time, read in the clinic's own zone.
+ *
+ * The server sends `local_start` already converted and offset-tagged. Parsing
+ * that and letting the browser re-apply its own zone would show a New York
+ * clinic its diary in whatever zone the receptionist's laptop is set to, so the
+ * offset is stripped and the wall-clock reading kept as sent.
+ */
+export function clinicTime(localIso: string): string {
+  const [date, rest] = localIso.split("T");
+  if (!date || !rest) return localIso;
+  const wall = new Date(`${date}T${rest.slice(0, 8)}`);
+  return wall.toLocaleString([], {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+const APPOINTMENT_LABELS: Record<string, string> = {
+  booked: "Booked",
+  rescheduled: "Moved",
+  cancelled: "Cancelled",
+  completed: "Completed",
+  no_show: "Did not attend",
+};
+
+export function appointmentStatus(status: string): string {
+  return APPOINTMENT_LABELS[status] ?? status;
+}
+
 const OUTCOME_LABELS: Record<string, string> = {
   appointment_booked: "Appointment booked",
   appointment_rescheduled: "Appointment moved",

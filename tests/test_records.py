@@ -308,3 +308,124 @@ class TestRecordingFromACall:
         assert message.is_open
         assert store.messages(tenant, open_only=True)[0].message_id == message.message_id
         assert message.summary()["caller_masked"] == "+1555…41"
+
+
+class TestBookingOutcomes:
+    """P7 finally makes `appointment_booked` a real outcome rather than a stub."""
+
+    def _result(self, **kw):  # noqa: ANN003, ANN202
+        base = {"call_id": "c-1", "tenant_id": "northside", "region": "us", "turns": 3}
+        return CallResult(**{**base, **kw})
+
+    def _appointment(self, status=None):  # noqa: ANN001, ANN202
+        from ait_voice.core.scheduling import Appointment, AppointmentStatus
+
+        return Appointment(
+            appointment_id="a-1",
+            tenant_id="northside",
+            starts_at=datetime(2026, 9, 2, 14, 30, tzinfo=UTC),
+            status=status or AppointmentStatus.BOOKED,
+        )
+
+    def test_a_booking_produces_the_booked_outcome(self) -> None:
+        assert outcome_for(self._result(), self._appointment()) is (
+            CallOutcome.APPOINTMENT_BOOKED
+        )
+
+    def test_a_reschedule_produces_the_moved_outcome(self) -> None:
+        from ait_voice.core.scheduling import AppointmentStatus
+
+        assert outcome_for(
+            self._result(), self._appointment(AppointmentStatus.RESCHEDULED)
+        ) is CallOutcome.APPOINTMENT_RESCHEDULED
+
+    def test_a_cancellation_produces_the_cancelled_outcome(self) -> None:
+        from ait_voice.core.scheduling import AppointmentStatus
+
+        assert outcome_for(
+            self._result(), self._appointment(AppointmentStatus.CANCELLED)
+        ) is CallOutcome.APPOINTMENT_CANCELLED
+
+    def test_an_unmapped_status_does_not_claim_a_booking(self) -> None:
+        from ait_voice.core.scheduling import AppointmentStatus
+
+        assert outcome_for(
+            self._result(), self._appointment(AppointmentStatus.NO_SHOW)
+        ) is CallOutcome.NO_ACTION
+
+    def test_escalation_wins_over_a_booking(self) -> None:
+        """Somebody still has to pick up the phone; a green tick would hide that."""
+        escalated = self._result(
+            escalated=True, escalation_reason="caller_requested_human"
+        )
+
+        assert outcome_for(escalated, self._appointment()) is CallOutcome.ESCALATED
+
+    def test_the_record_links_to_the_appointment(self) -> None:
+        store = CallStore()
+        tenant = _tenant()
+
+        record = record_call(
+            tenant, self._result(), store, appointment=self._appointment()
+        )
+
+        assert record.appointment_id == "a-1"
+        assert record.outcome is CallOutcome.APPOINTMENT_BOOKED
+
+    def test_the_booking_audit_entry_carries_no_reason(self) -> None:
+        """An appointment's reason is why someone is unwell."""
+        import tempfile
+
+        from ait_voice.core.scheduling import Appointment
+
+        store = CallStore()
+        tenant = _tenant()
+        appointment = Appointment(
+            appointment_id="a-1",
+            tenant_id="northside",
+            starts_at=datetime(2026, 9, 2, 14, 30, tzinfo=UTC),
+            patient_name=PHI("Priya Sharma"),
+            reason=PHI("persistent cough"),
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            audit = AuditLog(root=tmp)
+            record_call(tenant, self._result(), store, appointment=appointment, audit=audit)
+            entries = list(audit.read(tenant))
+
+        events = [e["event"] for e in entries]
+        assert "appointment_booked" in events
+        assert "Priya" not in str(entries)
+        assert "cough" not in str(entries)
+
+    def test_a_cancellation_is_audited_as_a_cancellation(self) -> None:
+        import tempfile
+
+        from ait_voice.core.scheduling import AppointmentStatus
+
+        store = CallStore()
+        tenant = _tenant()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            audit = AuditLog(root=tmp)
+            record_call(
+                tenant, self._result(), store,
+                appointment=self._appointment(AppointmentStatus.CANCELLED), audit=audit,
+            )
+            events = [e["event"] for e in audit.read(tenant)]
+
+        assert "appointment_cancelled" in events
+
+    def test_a_message_is_audited(self) -> None:
+        import tempfile
+
+        store = CallStore()
+        tenant = _tenant()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            audit = AuditLog(root=tmp)
+            take_message(tenant, "c-1", store, note="Call back", audit=audit)
+            entries = list(audit.read(tenant))
+
+        assert [e["event"] for e in entries] == ["message_taken"]
+        assert "Call back" not in str(entries)

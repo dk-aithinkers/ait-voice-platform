@@ -4400,3 +4400,18 @@
 **Event**: HUMAN_TURN
 
 ---
+
+## Subagent Completed
+**Timestamp**: 2026-09-01T09:09:31Z
+**Event**: SUBAGENT_COMPLETED
+**Agent Type**: 
+**Agent ID**: a19411f1e4d3ff567
+**Message**: yes, do P7 booking
+
+---
+
+## Human Turn
+**Timestamp**: 2026-09-01T09:10:11Z
+**Event**: HUMAN_TURN
+
+---

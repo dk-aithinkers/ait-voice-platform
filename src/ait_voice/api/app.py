@@ -33,6 +33,12 @@ from ait_voice.api.auth import (
     seed_from_environment,
 )
 from ait_voice.core.records import CallStore
+from ait_voice.core.scheduling import (
+    AppointmentNotFound,
+    BookingHours,
+    Calendar,
+    SlotUnavailable,
+)
 from ait_voice.core.tenancy import TenantConfig, TenantStore
 from ait_voice.core.types import TenantContext
 
@@ -50,10 +56,17 @@ class Services:
         tenants: TenantStore | None = None,
         calls: CallStore | None = None,
         principals: PrincipalStore | None = None,
+        calendar: Calendar | None = None,
+        booking_hours: BookingHours | None = None,
     ) -> None:
         self.tenants = tenants or TenantStore()
         self.calls = calls or CallStore()
         self.principals = principals or PrincipalStore()
+        self.calendar = calendar or Calendar()
+        # One booking policy for now. Per-clinic hours belong on TenantConfig
+        # once a clinic asks for different ones; inventing that setting before
+        # anyone needs it would be guessing at their diary.
+        self.booking_hours = booking_hours or BookingHours()
 
 
 def create_app(
@@ -225,9 +238,79 @@ def create_app(
             raise HTTPException(status_code=404, detail="no such message")
         return resolved.summary(reveal_note=True)
 
+    # -- appointments ----------------------------------------------------
+
+    @app.get("/api/appointments")
+    def list_appointments(
+        tenant: Scope, limit: Annotated[int, Query(ge=1, le=200)] = 50
+    ) -> list[dict[str, Any]]:
+        """Upcoming appointments — FR6.4.
+
+        Read-only: the clinic surface is read-only per the scope document, and
+        the agent is what books. Summaries carry no patient name; a diary needs
+        times, not identities.
+        """
+        config = services.tenants.get(tenant.tenant_id)
+        return [
+            {
+                **appointment.summary(),
+                "local_start": appointment.local_start(config).isoformat(),
+                "spoken": appointment.spoken(config),
+            }
+            for appointment in services.calendar.upcoming(tenant, limit=limit)
+        ]
+
+    @app.get("/api/availability")
+    def availability(
+        tenant: Scope, limit: Annotated[int, Query(ge=1, le=50)] = 10
+    ) -> list[dict[str, str]]:
+        """Free slots, so an operator can see what the agent would offer."""
+        config = services.tenants.get(tenant.tenant_id)
+        return [
+            {
+                "starts_at": slot.isoformat(),
+                "local_start": slot.astimezone(config.tz).isoformat(),
+            }
+            for slot in services.calendar.availability(
+                tenant, config, services.booking_hours, limit=limit
+            )
+        ]
+
+    @app.post("/api/appointments/{appointment_id}/cancel")
+    def cancel_appointment(
+        tenant: Scope, principal: Operator, appointment_id: str
+    ) -> dict[str, Any]:
+        """Cancel on the clinic's behalf. Operator-only — see above.
+
+        Exists because a clinic that has to phone AI Thinkers to cancel one
+        appointment is worse off than before the agent existed.
+        """
+        try:
+            cancelled = services.calendar.cancel(tenant, appointment_id)
+        except AppointmentNotFound as exc:
+            raise HTTPException(status_code=404, detail="no such appointment") from exc
+        return cancelled.summary()
+
     @app.get("/api/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.exception_handler(SlotUnavailable)
+    def slot_taken(_request, exc: SlotUnavailable):  # noqa: ANN001, ANN202
+        """409 with the alternatives attached, never a bare refusal.
+
+        FR2.5 requires alternatives to be offered, and a caller told only "no"
+        is the outcome the acceptance criteria forbid.
+        """
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": str(exc),
+                "alternatives": [slot.isoformat() for slot in exc.alternatives],
+            },
+        )
 
     return app
 

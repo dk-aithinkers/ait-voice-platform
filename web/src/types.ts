@@ -34,6 +34,7 @@ export interface CallSummary {
   escalated: boolean;
   escalation_reason: string | null;
   has_transcript: boolean;
+  appointment_id: string | null;
   p95_ms: number | null;
   /**
    * False when the transport could not observe time to first audio. The UI
@@ -61,6 +62,20 @@ export interface ActivitySummary {
   escalation_rate: number | null;
   messages_open: number;
   average_duration_seconds: number;
+}
+
+export interface Appointment {
+  appointment_id: string;
+  /** Absolute instant, UTC. */
+  starts_at: string;
+  /** The same instant in the clinic's own zone — what a person should read. */
+  local_start: string;
+  /** Exactly what the agent read back to the caller. */
+  spoken: string;
+  duration_minutes: number;
+  status: string;
+  call_id: string | null;
+  rescheduled_from: string | null;
 }
 
 export interface CallbackMessage {

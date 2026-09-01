@@ -1,5 +1,6 @@
 import type {
   ActivitySummary,
+  Appointment,
   CallDetail,
   CallSummary,
   CallbackMessage,
@@ -84,6 +85,8 @@ export const api = {
     request<CallDetail>(scoped(`/calls/${encodeURIComponent(callId)}`, tenant)),
   summary: (tenant?: string | null, days = 7) =>
     request<ActivitySummary>(scoped(`/summary?days=${days}`, tenant)),
+  appointments: (tenant?: string | null, limit = 50) =>
+    request<Appointment[]>(scoped(`/appointments?limit=${limit}`, tenant)),
   messages: (tenant?: string | null, openOnly = false) =>
     request<CallbackMessage[]>(
       scoped(`/messages?open_only=${openOnly}`, tenant),

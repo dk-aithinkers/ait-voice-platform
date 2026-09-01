@@ -25,22 +25,35 @@ from ait_voice.core.records import (
     Transcript,
     TranscriptTurn,
 )
+from ait_voice.core.scheduling import Appointment, AppointmentStatus
 from ait_voice.core.types import PHI, TenantContext, Utterance
 
+#: What a booking action means for the call's recorded outcome.
+_BOOKING_OUTCOMES = {
+    AppointmentStatus.BOOKED: CallOutcome.APPOINTMENT_BOOKED,
+    AppointmentStatus.RESCHEDULED: CallOutcome.APPOINTMENT_RESCHEDULED,
+    AppointmentStatus.CANCELLED: CallOutcome.APPOINTMENT_CANCELLED,
+}
 
-def outcome_for(result: CallResult) -> CallOutcome:
+
+def outcome_for(
+    result: CallResult, appointment: Appointment | None = None
+) -> CallOutcome:
     """Classify a finished call.
 
-    The skeleton only distinguishes escalation from everything else, because
-    booking does not exist yet. Naming that here rather than inventing richer
-    outcomes keeps the clinic's screen honest: it will show `no_action` until
-    P7 can actually book something, instead of showing a booking count that
-    nothing produces.
+    Escalation wins over a booking. A call where the agent booked something and
+    *then* handed off is an escalation as far as the clinic is concerned —
+    somebody still has to pick up the phone, and burying that under a green
+    "booked" is how an unmet handoff goes unnoticed.
+
+    A call with no booking is `no_action` rather than anything more flattering.
     """
     if result.escalation_reason == "dependency_failure":
         return CallOutcome.FAILED
     if result.escalated:
         return CallOutcome.ESCALATED
+    if appointment is not None:
+        return _BOOKING_OUTCOMES.get(appointment.status, CallOutcome.NO_ACTION)
     return CallOutcome.NO_ACTION
 
 
@@ -72,6 +85,7 @@ def record_call(
     started_at: datetime | None = None,
     duration_seconds: float = 0.0,
     language: str = "en",
+    appointment: Appointment | None = None,
     audit: AuditLog | None = None,
 ) -> CallRecord:
     """Persist a finished call, and note in the audit log that it happened.
@@ -86,7 +100,8 @@ def record_call(
         started_at=started_at or datetime.now(UTC),
         duration_seconds=duration_seconds,
         turns=result.turns,
-        outcome=outcome_for(result),
+        outcome=outcome_for(result, appointment),
+        appointment_id=appointment.appointment_id if appointment else None,
         language=language,
         caller=PHI(caller_number) if caller_number else None,
         caller_ref=reference,
@@ -99,6 +114,21 @@ def record_call(
 
     if history:
         store.attach_transcript(tenant, transcript_from(result.call_id, history))
+
+    if audit and appointment is not None:
+        # The booking is its own auditable fact, separate from the call ending.
+        # Times and ids only — an appointment's reason is why someone is
+        # unwell, and that never reaches the security log.
+        audit.record(
+            tenant,
+            AuditEvent.APPOINTMENT_BOOKED
+            if appointment.status is not AppointmentStatus.CANCELLED
+            else AuditEvent.APPOINTMENT_CANCELLED,
+            call_id=result.call_id,
+            caller_ref=reference or None,
+            appointment_id=appointment.appointment_id,
+            starts_at=appointment.starts_at.isoformat(),
+        )
 
     if audit:
         audit.record(
