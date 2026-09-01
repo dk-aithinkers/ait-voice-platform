@@ -53,7 +53,18 @@ def owner_settings() -> DatabaseSettings:
 
 
 @pytest.fixture
-async def database(app_settings: DatabaseSettings) -> AsyncIterator[Database]:
+async def database(app_settings: DatabaseSettings) -> AsyncIterator[Database | None]:
+    """A connected pool, or None when Postgres is not configured.
+
+    None rather than an error so a suite that is parameterised over both an
+    in-memory and a Postgres implementation can run its in-memory half on a
+    machine with no database. The Postgres half is not generated at all in that
+    case — see `postgres_available` — so nothing silently skips a check while
+    reporting green.
+    """
+    if not postgres_available():
+        yield None
+        return
     db = Database(app_settings)
     await db.connect()
     try:
@@ -113,7 +124,10 @@ async def clean_database(request: pytest.FixtureRequest) -> AsyncIterator[None]:
 
 
 @pytest.fixture
-async def owner(owner_settings: DatabaseSettings) -> AsyncIterator[Database]:
+async def owner(owner_settings: DatabaseSettings) -> AsyncIterator[Database | None]:
+    if not postgres_available():
+        yield None
+        return
     db = Database(owner_settings)
     await db.connect(allow_superuser=True)
     try:

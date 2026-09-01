@@ -227,8 +227,13 @@ class TenantStore:
     def __iter__(self) -> Iterator[TenantConfig]:
         return iter(self._configs.values())
 
-    @property
     def active_tenants(self) -> list[TenantConfig]:
+        """Clinics currently answering.
+
+        A method rather than a property so the Postgres repository can offer
+        the same name — an async property is not a thing, and a swap that
+        forces every caller to change shape is not a swap.
+        """
         return [c for c in self._configs.values() if c.active]
 
     def by_region(self, region: Region) -> list[TenantConfig]:
