@@ -33,6 +33,21 @@ from ait_voice.core.types import PHI, Region, TenantContext, Utterance
 
 
 @runtime_checkable
+class WebSocketLike(Protocol):
+    """The slice of a WebSocket the telephony adapters use.
+
+    Narrow on purpose: it keeps the transports testable without a live carrier,
+    and keeps a vendor's socket type out of our signatures per the quarantine
+    convention. Both the Twilio media-stream adapter and ConversationRelay
+    speak exactly this much.
+    """
+
+    async def send(self, message: str) -> None: ...
+
+    def __aiter__(self) -> AsyncIterator[str]: ...
+
+
+@runtime_checkable
 class STTProvider(Protocol):
     """Speech to text.
 
@@ -43,14 +58,24 @@ class STTProvider(Protocol):
 
     name: str
 
-    async def transcribe(
+    def transcribe(
         self,
         tenant: TenantContext,
         audio: AsyncIterator[bytes],
         *,
         language: str | None = None,
     ) -> AsyncIterator[Utterance]:
-        """Yield utterances recognised from an audio stream."""
+        """Yield utterances recognised from an audio stream.
+
+        Declared ``def`` rather than ``async def`` deliberately. An
+        ``async def`` whose body is ``...`` is a *coroutine* returning an
+        iterator — callers would have to ``await`` it first. Every
+        implementation here uses ``yield``, which makes it an async generator
+        that callers iterate directly, and that is what the pipeline does.
+        Declaring it ``async def`` made this protocol describe a contract no
+        implementation honoured, and ``@runtime_checkable`` hid it by checking
+        only that the method name exists.
+        """
         ...
 
 
@@ -85,14 +110,17 @@ class TTSProvider(Protocol):
 
     name: str
 
-    async def synthesize(
+    def synthesize(
         self,
         tenant: TenantContext,
         utterance: Utterance,
         *,
         voice: str | None = None,
     ) -> AsyncIterator[bytes]:
-        """Yield audio chunks for an utterance."""
+        """Yield audio chunks for an utterance.
+
+        ``def``, not ``async def`` — see :meth:`STTProvider.transcribe`.
+        """
         ...
 
 
@@ -282,6 +310,7 @@ __all__ = [
     "LLMProvider",
     "ProviderRegistry",
     "SpeechTiming",
+    "WebSocketLike",
     "ProviderSet",
     "STTProvider",
     "TTSProvider",

@@ -26,9 +26,7 @@ from ait_voice.core.types import PHI, Region
 
 
 def _config(tenant_id: str = "northside", region: Region = Region.US, **kw) -> TenantConfig:
-    return TenantConfig(
-        tenant_id=tenant_id, region=region, clinic_name="Northside Medical", **kw
-    )
+    return TenantConfig(tenant_id=tenant_id, region=region, clinic_name="Northside Medical", **kw)
 
 
 class TestTenantIsolation:
@@ -227,9 +225,7 @@ class TestStaffedHours:
 
 class TestEscalationRouting:
     def test_staffed_hours_route_to_the_number(self) -> None:
-        config = _config(
-            staffed_hours=StaffedHours.weekdays(), escalation_number="+15551230000"
-        )
+        config = _config(staffed_hours=StaffedHours.weekdays(), escalation_number="+15551230000")
         route = config.escalation_route(datetime(2026, 9, 2, 10, 0, tzinfo=UTC))
         assert route == "+15551230000"
 
@@ -257,9 +253,10 @@ class TestEscalationRouting:
             staffed_hours=StaffedHours.never(),
             out_of_hours=OutOfHoursPolicy.TRANSFER_ANYWAY,
         )
-        assert config.escalation_route(
-            datetime(2026, 9, 2, 3, 0, tzinfo=UTC)
-        ) is OutOfHoursPolicy.TRANSFER_ANYWAY
+        assert (
+            config.escalation_route(datetime(2026, 9, 2, 3, 0, tzinfo=UTC))
+            is OutOfHoursPolicy.TRANSFER_ANYWAY
+        )
 
 
 class TestTenantsAreIndependentlyConfigured:

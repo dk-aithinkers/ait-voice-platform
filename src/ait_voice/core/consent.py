@@ -90,7 +90,9 @@ class ConsentLedger:
         self._grants: dict[tuple[str, str, str], Consent] = {}
 
     @staticmethod
-    def _key(tenant: TenantContext, caller_ref: str, purpose: ConsentPurpose) -> tuple:
+    def _key(
+        tenant: TenantContext, caller_ref: str, purpose: ConsentPurpose
+    ) -> tuple[str, str, str]:
         return (tenant.tenant_id, caller_ref, str(purpose))
 
     def grant(
@@ -110,9 +112,7 @@ class ConsentLedger:
         self._grants[self._key(tenant, caller_ref, purpose)] = consent
         return consent
 
-    def revoke(
-        self, tenant: TenantContext, caller_ref: str, purpose: ConsentPurpose
-    ) -> bool:
+    def revoke(self, tenant: TenantContext, caller_ref: str, purpose: ConsentPurpose) -> bool:
         """Withdraw consent. Always available, in every jurisdiction."""
         return self._grants.pop(self._key(tenant, caller_ref, purpose), None) is not None
 

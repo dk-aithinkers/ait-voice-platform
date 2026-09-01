@@ -20,6 +20,8 @@ from ait_voice.core.audit import (
     AuditLog,
     ContentStore,
     caller_ref,
+    default_audit_root,
+    default_content_root,
 )
 from ait_voice.core.consent import (
     INDIA_CONSENT_VALIDITY,
@@ -52,8 +54,11 @@ def content(tmp_path: Path) -> ContentStore:
 class TestAuditLogCarriesNoPersonalData:
     def test_phi_in_detail_is_refused(self, audit: AuditLog) -> None:
         with pytest.raises(AuditIntegrityError, match="is PHI"):
+            # Deliberately the wrong type — the guard refusing it is the test.
             audit.record(
-                _us(), AuditEvent.CALL_STARTED, patient=PHI("Priya Sharma")
+                _us(),
+                AuditEvent.CALL_STARTED,
+                patient=PHI("Priya Sharma"),  # type: ignore[arg-type]
             )
 
     def test_long_strings_are_refused_as_content(self, audit: AuditLog) -> None:
@@ -67,7 +72,8 @@ class TestAuditLogCarriesNoPersonalData:
 
     def test_non_scalar_detail_is_refused(self, audit: AuditLog) -> None:
         with pytest.raises(AuditIntegrityError, match="only scalars"):
-            audit.record(_us(), AuditEvent.CALL_STARTED, turns=[1, 2, 3])
+            # A non-scalar, refused by design.
+            audit.record(_us(), AuditEvent.CALL_STARTED, turns=[1, 2, 3])  # type: ignore[arg-type]
 
     def test_identifiers_and_codes_are_accepted(self, audit: AuditLog) -> None:
         entry = audit.record(
@@ -82,9 +88,7 @@ class TestAuditLogCarriesNoPersonalData:
         )
         assert entry.detail["turn"] == 2
 
-    def test_a_written_log_contains_no_patient_data(
-        self, audit: AuditLog, tmp_path: Path
-    ) -> None:
+    def test_a_written_log_contains_no_patient_data(self, audit: AuditLog, tmp_path: Path) -> None:
         """The property that matters, asserted against the bytes on disk."""
         tenant = _us()
         ref = caller_ref("+15551234567", tenant_id=tenant.tenant_id)
@@ -122,9 +126,7 @@ class TestAuditLogIntegrity:
 
         assert audit.verify(tenant) is True
 
-    def test_tampering_with_an_entry_is_detected(
-        self, audit: AuditLog, tmp_path: Path
-    ) -> None:
+    def test_tampering_with_an_entry_is_detected(self, audit: AuditLog, tmp_path: Path) -> None:
         tenant = _us()
         audit.record(tenant, AuditEvent.CALL_STARTED, call_id="c-1")
         audit.record(tenant, AuditEvent.CALL_ENDED, call_id="c-1", turns=3)
@@ -136,9 +138,7 @@ class TestAuditLogIntegrity:
 
         assert audit.verify(tenant) is False
 
-    def test_removing_an_entry_is_detected(
-        self, audit: AuditLog, tmp_path: Path
-    ) -> None:
+    def test_removing_an_entry_is_detected(self, audit: AuditLog, tmp_path: Path) -> None:
         """Append-only means a deletion must not go unnoticed."""
         tenant = _us()
         for i in range(3):
@@ -150,9 +150,7 @@ class TestAuditLogIntegrity:
 
         assert audit.verify(tenant) is False
 
-    def test_entries_are_region_partitioned(
-        self, audit: AuditLog, tmp_path: Path
-    ) -> None:
+    def test_entries_are_region_partitioned(self, audit: AuditLog, tmp_path: Path) -> None:
         """Region determines retention and residency; trees never mix."""
         audit.record(_us(), AuditEvent.CALL_STARTED)
         audit.record(_india(), AuditEvent.CALL_STARTED)
@@ -219,9 +217,7 @@ class TestConsentExpiry:
         tenant = _india(outbound_registered=True)
         granted = datetime(2026, 1, 1, tzinfo=UTC)
 
-        ledger.grant(
-            tenant, "caller-1", ConsentPurpose.APPOINTMENT_REMINDER, at=granted
-        )
+        ledger.grant(tenant, "caller-1", ConsentPurpose.APPOINTMENT_REMINDER, at=granted)
 
         assert ledger.is_valid(
             tenant,
@@ -244,9 +240,7 @@ class TestConsentExpiry:
         tenant = _us()
         granted = datetime(2020, 1, 1, tzinfo=UTC)
 
-        consent = ledger.grant(
-            tenant, "caller-1", ConsentPurpose.APPOINTMENT_REMINDER, at=granted
-        )
+        consent = ledger.grant(tenant, "caller-1", ConsentPurpose.APPOINTMENT_REMINDER, at=granted)
 
         assert consent.expires_at is None
         assert consent.is_valid(now=granted + timedelta(days=3650))
@@ -272,9 +266,7 @@ class TestConsentExpiry:
         ledger = ConsentLedger()
         tenant = _india(outbound_registered=True)
         granted = datetime(2026, 1, 1, tzinfo=UTC)
-        consent = ledger.grant(
-            tenant, "caller-1", ConsentPurpose.APPOINTMENT_REMINDER, at=granted
-        )
+        consent = ledger.grant(tenant, "caller-1", ConsentPurpose.APPOINTMENT_REMINDER, at=granted)
 
         assert consent.remaining(now=granted + timedelta(days=2)) == timedelta(days=5)
         assert consent.remaining(now=granted + timedelta(days=99)) == timedelta(0)
@@ -288,26 +280,20 @@ class TestOutboundGate:
         ledger.grant(tenant, "caller-1", ConsentPurpose.APPOINTMENT_REMINDER)
 
         with pytest.raises(ConsentDenied, match="DLT registration"):
-            may_place_outbound_call(
-                tenant, "caller-1", ConsentPurpose.APPOINTMENT_REMINDER, ledger
-            )
+            may_place_outbound_call(tenant, "caller-1", ConsentPurpose.APPOINTMENT_REMINDER, ledger)
 
     def test_registered_india_tenant_with_fresh_consent_may_call(self) -> None:
         ledger = ConsentLedger()
         tenant = _india(outbound_registered=True)
         ledger.grant(tenant, "caller-1", ConsentPurpose.APPOINTMENT_REMINDER)
 
-        may_place_outbound_call(
-            tenant, "caller-1", ConsentPurpose.APPOINTMENT_REMINDER, ledger
-        )
+        may_place_outbound_call(tenant, "caller-1", ConsentPurpose.APPOINTMENT_REMINDER, ledger)
 
     def test_expired_consent_blocks_the_call(self) -> None:
         ledger = ConsentLedger()
         tenant = _india(outbound_registered=True)
         granted = datetime(2026, 1, 1, tzinfo=UTC)
-        ledger.grant(
-            tenant, "caller-1", ConsentPurpose.APPOINTMENT_REMINDER, at=granted
-        )
+        ledger.grant(tenant, "caller-1", ConsentPurpose.APPOINTMENT_REMINDER, at=granted)
 
         with pytest.raises(ConsentDenied, match="expired"):
             may_place_outbound_call(
@@ -321,9 +307,7 @@ class TestOutboundGate:
     def test_absent_consent_blocks_the_call(self) -> None:
         ledger = ConsentLedger()
         with pytest.raises(ConsentDenied, match="no consent recorded"):
-            may_place_outbound_call(
-                _us(), "caller-1", ConsentPurpose.APPOINTMENT_REMINDER, ledger
-            )
+            may_place_outbound_call(_us(), "caller-1", ConsentPurpose.APPOINTMENT_REMINDER, ledger)
 
     def test_us_tenant_is_not_gated_on_dlt_registration(self) -> None:
         """DLT is an Indian obligation. It must not leak into the US path."""
@@ -331,6 +315,106 @@ class TestOutboundGate:
         tenant = _us(outbound_registered=False)
         ledger.grant(tenant, "caller-1", ConsentPurpose.APPOINTMENT_REMINDER)
 
-        may_place_outbound_call(
-            tenant, "caller-1", ConsentPurpose.APPOINTMENT_REMINDER, ledger
-        )
+        may_place_outbound_call(tenant, "caller-1", ConsentPurpose.APPOINTMENT_REMINDER, ledger)
+
+
+class TestAuditChainSurvivesRestart:
+    """The branch the per-package gate found: appending to an existing log.
+
+    Every audit test until now built a fresh log in a fresh directory, so the
+    resumption path — read the last hash off disk, chain onto it — had line
+    coverage from `_read_last_hash`'s early return and no branch coverage at
+    all. If it were broken, the chain would silently restart on every deploy,
+    and an audit log whose chain restarts is not tamper-evident.
+    """
+
+    def test_a_second_process_chains_onto_the_existing_log(self, tmp_path) -> None:  # noqa: ANN001
+        tenant = TenantContext(tenant_id="northside", region=Region.US)
+
+        first = AuditLog(root=tmp_path)
+        first.record(tenant, AuditEvent.CALL_STARTED, call_id="c-1")
+        first.record(tenant, AuditEvent.CALL_ENDED, call_id="c-1")
+
+        # A fresh instance, as after a restart — no in-memory hash to carry.
+        second = AuditLog(root=tmp_path)
+        second.record(tenant, AuditEvent.CALL_STARTED, call_id="c-2")
+
+        assert second.verify(tenant), "the chain broke across a restart"
+        assert len(list(second.read(tenant))) == 3
+
+    def test_the_chain_links_across_the_restart_boundary(self, tmp_path) -> None:  # noqa: ANN001
+        tenant = TenantContext(tenant_id="northside", region=Region.US)
+        first = AuditLog(root=tmp_path)
+        first.record(tenant, AuditEvent.CALL_STARTED, call_id="c-1")
+
+        second = AuditLog(root=tmp_path)
+        second.record(tenant, AuditEvent.CALL_ENDED, call_id="c-1")
+
+        entries = list(second.read(tenant))
+        assert entries[1]["previous_hash"] == entries[0]["hash"]
+
+    def test_a_blank_line_in_the_log_does_not_break_resumption(self, tmp_path) -> None:  # noqa: ANN001
+        """Files acquire trailing newlines; that must not restart the chain."""
+        tenant = TenantContext(tenant_id="northside", region=Region.US)
+        first = AuditLog(root=tmp_path)
+        first.record(tenant, AuditEvent.CALL_STARTED, call_id="c-1")
+
+        path = tmp_path / "us" / "northside.jsonl"
+        path.write_text(path.read_text() + "\n")
+
+        AuditLog(root=tmp_path).record(tenant, AuditEvent.CALL_ENDED, call_id="c-1")
+
+        assert AuditLog(root=tmp_path).verify(tenant)
+
+    def test_reading_a_tenant_with_no_log_yields_nothing(self, tmp_path) -> None:  # noqa: ANN001
+        """A clinic that has taken no calls is not an error."""
+        tenant = TenantContext(tenant_id="brand-new", region=Region.US)
+
+        assert list(AuditLog(root=tmp_path).read(tenant)) == []
+        assert AuditLog(root=tmp_path).verify(tenant) is True
+
+
+class TestContentStoreWithoutAudit:
+    """The audit log is optional on the content store, and both paths matter."""
+
+    def test_content_can_be_stored_without_an_audit_log(self, tmp_path) -> None:  # noqa: ANN001
+        tenant = TenantContext(tenant_id="northside", region=Region.US)
+        store = ContentStore(root=tmp_path)
+
+        path = store.store(tenant, "c-1", [PHI("hello")])
+
+        assert path.exists()
+        assert store.exists(tenant, "c-1")
+
+    def test_content_can_be_erased_without_an_audit_log(self, tmp_path) -> None:  # noqa: ANN001
+        tenant = TenantContext(tenant_id="northside", region=Region.US)
+        store = ContentStore(root=tmp_path)
+        store.store(tenant, "c-1", [PHI("hello")])
+
+        assert store.erase(tenant, "c-1") is True
+        assert not store.exists(tenant, "c-1")
+
+    def test_erasing_absent_content_reports_it_did_not_exist(self, tmp_path) -> None:  # noqa: ANN001
+        """Recorded rather than swallowed: an erasure request for content that
+        was already gone is a different fact from one that deleted something."""
+        tenant = TenantContext(tenant_id="northside", region=Region.US)
+
+        assert ContentStore(root=tmp_path).erase(tenant, "never-existed") is False
+
+
+class TestStorageRoots:
+    def test_the_roots_default_to_var(self, monkeypatch) -> None:  # noqa: ANN001
+        monkeypatch.delenv("AIT_AUDIT_ROOT", raising=False)
+        monkeypatch.delenv("AIT_CONTENT_ROOT", raising=False)
+
+        assert str(default_audit_root()) == "var/audit"
+        assert str(default_content_root()) == "var/content"
+
+    def test_the_roots_are_separately_overridable(self, monkeypatch) -> None:  # noqa: ANN001
+        """They are two variables because their retention obligations are
+        opposite; pointing both at one path collapses C-R7 against C-R8."""
+        monkeypatch.setenv("AIT_AUDIT_ROOT", "/srv/audit")
+        monkeypatch.setenv("AIT_CONTENT_ROOT", "/srv/content")
+
+        assert str(default_audit_root()) == "/srv/audit"
+        assert str(default_content_root()) == "/srv/content"

@@ -36,9 +36,7 @@ _BOOKING_OUTCOMES = {
 }
 
 
-def outcome_for(
-    result: CallResult, appointment: Appointment | None = None
-) -> CallOutcome:
+def outcome_for(result: CallResult, appointment: Appointment | None = None) -> CallOutcome:
     """Classify a finished call.
 
     Escalation wins over a booking. A call where the agent booked something and

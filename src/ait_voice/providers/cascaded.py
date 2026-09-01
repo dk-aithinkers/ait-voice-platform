@@ -20,6 +20,7 @@ from collections.abc import AsyncIterator
 from ait_voice.core.types import TenantContext, Utterance
 from ait_voice.providers.base import (
     AudioSink,
+    DialogTransport,
     ProviderSet,
     SpeechTiming,
     STTProvider,
@@ -85,8 +86,7 @@ class CascadedTransport:
     def __init__(self, providers: ProviderSet) -> None:
         self._providers = providers
         self.name = (
-            f"cascaded({providers.stt.name}+{providers.tts.name}"
-            f"+{providers.telephony.name})"
+            f"cascaded({providers.stt.name}+{providers.tts.name}+{providers.telephony.name})"
         )
 
     async def open(self, tenant: TenantContext, call_id: str) -> CascadedSession:
@@ -100,7 +100,7 @@ class CascadedTransport:
         )
 
 
-def transport_for(providers: ProviderSet):  # noqa: ANN201 - DialogTransport
+def transport_for(providers: ProviderSet) -> DialogTransport:
     """The transport a provider set should use.
 
     A bundled vendor if one is configured, otherwise the cascade. One place

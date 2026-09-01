@@ -55,9 +55,7 @@ def calendar() -> Calendar:
 
 class TestBooking:
     def test_a_slot_can_be_booked(self, calendar, config, hours) -> None:
-        appointment = calendar.book(
-            config.context(), config, hours, WEDNESDAY_1030, now=NOW
-        )
+        appointment = calendar.book(config.context(), config, hours, WEDNESDAY_1030, now=NOW)
 
         assert appointment.status is AppointmentStatus.BOOKED
         assert appointment.starts_at == WEDNESDAY_1030
@@ -66,8 +64,13 @@ class TestBooking:
     def test_it_is_persisted_against_the_clinic(self, calendar, config, hours) -> None:
         """The BDD criterion: persisted against that clinic and that caller."""
         appointment = calendar.book(
-            config.context(), config, hours, WEDNESDAY_1030,
-            caller_ref="caller-abc", call_id="c-1", now=NOW,
+            config.context(),
+            config,
+            hours,
+            WEDNESDAY_1030,
+            caller_ref="caller-abc",
+            call_id="c-1",
+            now=NOW,
         )
 
         stored = calendar.get(config.context(), appointment.appointment_id)
@@ -76,9 +79,7 @@ class TestBooking:
 
     def test_the_time_is_read_back_in_clinic_local_time(self, calendar, config, hours) -> None:
         """FR2.4 — and 14:30 UTC must be spoken as half past ten, not half past two."""
-        appointment = calendar.book(
-            config.context(), config, hours, WEDNESDAY_1030, now=NOW
-        )
+        appointment = calendar.book(config.context(), config, hours, WEDNESDAY_1030, now=NOW)
 
         assert appointment.spoken(config) == "Wednesday 2 September at 10:30 am"
 
@@ -86,14 +87,22 @@ class TestBooking:
         """It would be read as UTC and book someone hours from where they meant."""
         with pytest.raises(ValueError, match="timezone-aware"):
             calendar.book(
-                config.context(), config, hours,
-                datetime(2026, 9, 2, 14, 30), now=NOW,
+                config.context(),
+                config,
+                hours,
+                datetime(2026, 9, 2, 14, 30),
+                now=NOW,
             )
 
     def test_phi_is_wrapped(self, calendar, config, hours) -> None:
         appointment = calendar.book(
-            config.context(), config, hours, WEDNESDAY_1030,
-            patient_name="Priya Sharma", reason="persistent cough", now=NOW,
+            config.context(),
+            config,
+            hours,
+            WEDNESDAY_1030,
+            patient_name="Priya Sharma",
+            reason="persistent cough",
+            now=NOW,
         )
 
         assert isinstance(appointment.patient_name, PHI)
@@ -103,8 +112,13 @@ class TestBooking:
     def test_the_summary_carries_no_phi(self, calendar, config, hours) -> None:
         """A diary view needs times, not names."""
         appointment = calendar.book(
-            config.context(), config, hours, WEDNESDAY_1030,
-            patient_name="Priya Sharma", reason="persistent cough", now=NOW,
+            config.context(),
+            config,
+            hours,
+            WEDNESDAY_1030,
+            patient_name="Priya Sharma",
+            reason="persistent cough",
+            now=NOW,
         )
 
         assert "Priya" not in str(appointment.summary())
@@ -120,9 +134,7 @@ class TestNoDoubleBooking:
         with pytest.raises(SlotUnavailable, match="already taken"):
             calendar.book(config.context(), config, hours, WEDNESDAY_1030, now=NOW)
 
-    def test_concurrent_bookings_produce_exactly_one_winner(
-        self, calendar, config, hours
-    ) -> None:
+    def test_concurrent_bookings_produce_exactly_one_winner(self, calendar, config, hours) -> None:
         """The race that puts two patients in one room, run for real."""
         tenant = config.context()
         booked, refused = [], []
@@ -131,8 +143,12 @@ class TestNoDoubleBooking:
             try:
                 booked.append(
                     calendar.book(
-                        tenant, config, hours, WEDNESDAY_1030,
-                        caller_ref=f"caller-{index}", now=NOW,
+                        tenant,
+                        config,
+                        hours,
+                        WEDNESDAY_1030,
+                        caller_ref=f"caller-{index}",
+                        now=NOW,
                     )
                 )
             except SlotUnavailable:
@@ -185,23 +201,32 @@ class TestAlternatives:
     def test_a_past_time_is_refused(self, calendar, config, hours) -> None:
         with pytest.raises(SlotUnavailable, match="in the past"):
             calendar.book(
-                config.context(), config, hours,
-                NOW - timedelta(days=1), now=NOW,
+                config.context(),
+                config,
+                hours,
+                NOW - timedelta(days=1),
+                now=NOW,
             )
 
     def test_beyond_the_horizon_is_refused(self, calendar, config, hours) -> None:
         """A phone agent should not commit a clinic's diary a year out."""
         with pytest.raises(SlotUnavailable, match="days ahead"):
             calendar.book(
-                config.context(), config, hours,
-                NOW + timedelta(days=200), now=NOW,
+                config.context(),
+                config,
+                hours,
+                NOW + timedelta(days=200),
+                now=NOW,
             )
 
     def test_an_off_grid_time_is_refused(self, calendar, config, hours) -> None:
         with pytest.raises(SlotUnavailable, match="half hour"):
             calendar.book(
-                config.context(), config, hours,
-                WEDNESDAY_1030 + timedelta(minutes=7), now=NOW,
+                config.context(),
+                config,
+                hours,
+                WEDNESDAY_1030 + timedelta(minutes=7),
+                now=NOW,
             )
 
 
@@ -211,8 +236,12 @@ class TestRescheduling:
         original = calendar.book(tenant, config, hours, WEDNESDAY_1030, now=NOW)
 
         moved = calendar.reschedule(
-            tenant, config, hours, original.appointment_id,
-            WEDNESDAY_1030 + timedelta(hours=2), now=NOW,
+            tenant,
+            config,
+            hours,
+            original.appointment_id,
+            WEDNESDAY_1030 + timedelta(hours=2),
+            now=NOW,
         )
 
         assert moved.status is AppointmentStatus.RESCHEDULED
@@ -222,8 +251,12 @@ class TestRescheduling:
         tenant = config.context()
         original = calendar.book(tenant, config, hours, WEDNESDAY_1030, now=NOW)
         calendar.reschedule(
-            tenant, config, hours, original.appointment_id,
-            WEDNESDAY_1030 + timedelta(hours=2), now=NOW,
+            tenant,
+            config,
+            hours,
+            original.appointment_id,
+            WEDNESDAY_1030 + timedelta(hours=2),
+            now=NOW,
         )
 
         assert calendar.is_free(tenant, WEDNESDAY_1030)
@@ -238,9 +271,7 @@ class TestRescheduling:
         calendar.book(tenant, config, hours, second_time, now=NOW)
 
         with pytest.raises(SlotUnavailable):
-            calendar.reschedule(
-                tenant, config, hours, first.appointment_id, second_time, now=NOW
-            )
+            calendar.reschedule(tenant, config, hours, first.appointment_id, second_time, now=NOW)
 
         assert calendar.get(tenant, first.appointment_id).starts_at == WEDNESDAY_1030
 
@@ -257,9 +288,7 @@ class TestRescheduling:
 
     def test_rescheduling_an_unknown_appointment_raises(self, calendar, config, hours) -> None:
         with pytest.raises(AppointmentNotFound):
-            calendar.reschedule(
-                config.context(), config, hours, "ghost", WEDNESDAY_1030, now=NOW
-            )
+            calendar.reschedule(config.context(), config, hours, "ghost", WEDNESDAY_1030, now=NOW)
 
     def test_a_cancelled_appointment_cannot_be_moved(self, calendar, config, hours) -> None:
         tenant = config.context()
@@ -268,8 +297,12 @@ class TestRescheduling:
 
         with pytest.raises(AppointmentNotFound):
             calendar.reschedule(
-                tenant, config, hours, original.appointment_id,
-                WEDNESDAY_1030 + timedelta(hours=1), now=NOW,
+                tenant,
+                config,
+                hours,
+                original.appointment_id,
+                WEDNESDAY_1030 + timedelta(hours=1),
+                now=NOW,
             )
 
 
@@ -301,8 +334,12 @@ class TestCallerIdentification:
             tenant, config, hours, WEDNESDAY_1030, caller_ref="caller-abc", now=NOW
         )
         calendar.book(
-            tenant, config, hours, WEDNESDAY_1030 + timedelta(hours=1),
-            caller_ref="caller-xyz", now=NOW,
+            tenant,
+            config,
+            hours,
+            WEDNESDAY_1030 + timedelta(hours=1),
+            caller_ref="caller-xyz",
+            now=NOW,
         )
 
         found = calendar.for_caller(tenant, "caller-abc")
@@ -356,7 +393,10 @@ class TestBookingHours:
         day = datetime(2026, 9, 2, 0, 0)
 
         assert [s.strftime("%H:%M") for s in hours.slots_on(day)] == [
-            "09:00", "09:30", "10:00", "10:30"
+            "09:00",
+            "09:30",
+            "10:00",
+            "10:30",
         ]
 
     def test_the_closing_slot_is_exclusive(self) -> None:
@@ -381,8 +421,11 @@ class TestBookingHours:
         from ait_voice.core.tenancy import StaffedHours
 
         config = TenantConfig(
-            tenant_id="t", region=Region.US, clinic_name="T",
-            staffed_hours=StaffedHours.never(), timezone="America/New_York",
+            tenant_id="t",
+            region=Region.US,
+            clinic_name="T",
+            staffed_hours=StaffedHours.never(),
+            timezone="America/New_York",
         )
         calendar, hours = Calendar(), BookingHours()
 
@@ -417,7 +460,9 @@ class TestAvailability:
 class TestAppointmentShape:
     def test_ends_at_follows_the_duration(self) -> None:
         appointment = Appointment(
-            appointment_id="a", tenant_id="t", starts_at=WEDNESDAY_1030,
+            appointment_id="a",
+            tenant_id="t",
+            starts_at=WEDNESDAY_1030,
             duration_minutes=45,
         )
         assert appointment.ends_at == WEDNESDAY_1030 + timedelta(minutes=45)
@@ -442,7 +487,8 @@ class TestAppointmentShape:
         """strftime("%I") gives "12"; a naive lstrip("0") would give "2"."""
         config = _config(timezone="UTC")
         appointment = Appointment(
-            appointment_id="a", tenant_id="t",
+            appointment_id="a",
+            tenant_id="t",
             starts_at=datetime(2026, 9, 2, 12, 0, tzinfo=UTC),
         )
         assert "at 12:00 pm" in appointment.spoken(config)
@@ -457,7 +503,9 @@ class TestClinicLocalTime:
 
     def test_an_india_clinic_reads_its_own_hours(self) -> None:
         config = TenantConfig(
-            tenant_id="parkclinic", region=Region.INDIA, clinic_name="Park",
+            tenant_id="parkclinic",
+            region=Region.INDIA,
+            clinic_name="Park",
             timezone="Asia/Kolkata",
         )
         # 05:00 UTC = 10:30 IST
@@ -467,11 +515,11 @@ class TestClinicLocalTime:
         """Better than discovering it when a patient is given the wrong hour."""
         with pytest.raises(ValueError, match="unknown timezone"):
             TenantConfig(
-                tenant_id="t", region=Region.US, clinic_name="T",
+                tenant_id="t",
+                region=Region.US,
+                clinic_name="T",
                 timezone="Mars/Olympus_Mons",
             )
 
     def test_the_default_zone_is_utc(self) -> None:
-        assert TenantConfig(
-            tenant_id="t", region=Region.US, clinic_name="T"
-        ).timezone == "UTC"
+        assert TenantConfig(tenant_id="t", region=Region.US, clinic_name="T").timezone == "UTC"

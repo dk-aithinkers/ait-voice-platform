@@ -25,9 +25,7 @@ from ait_voice.core.types import PHI, Region, TenantContext, Utterance
 
 
 def _tenant(tenant_id: str = "northside", region: Region = Region.US) -> TenantContext:
-    return TenantConfig(
-        tenant_id=tenant_id, region=region, clinic_name="Northside"
-    ).context()
+    return TenantConfig(tenant_id=tenant_id, region=region, clinic_name="Northside").context()
 
 
 def _record(call_id: str = "c-1", **kw) -> CallRecord:  # noqa: ANN003
@@ -120,7 +118,7 @@ class TestRecentAndSummary:
         tenant = _tenant()
         now = datetime.now(UTC)
         for i in range(3):
-            store.add(store and tenant, _record(f"c-{i}", started_at=now - timedelta(hours=i)))
+            store.add(tenant, _record(f"c-{i}", started_at=now - timedelta(hours=i)))
 
         assert [r.call_id for r in store.recent(tenant)] == ["c-0", "c-1", "c-2"]
 
@@ -164,9 +162,7 @@ class TestRecentAndSummary:
 
     def test_the_summary_carries_no_hours_saved_field(self) -> None:
         """I-02 — no baseline exists, so the figure would be manufactured."""
-        assert not any(
-            "hours" in f for f in ActivitySummary(window_days=7).__slots__
-        )
+        assert not any("hours" in f for f in ActivitySummary(window_days=7).__slots__)
 
 
 class TestErasure:
@@ -220,9 +216,7 @@ class TestMessages:
         assert [m.message_id for m in store.messages(tenant, open_only=True)] == ["m2"]
 
     def test_the_note_stays_wrapped_unless_asked_for(self) -> None:
-        message = Message(
-            "m1", "c", "northside", datetime.now(UTC), note=PHI("call back Thursday")
-        )
+        message = Message("m1", "c", "northside", datetime.now(UTC), note=PHI("call back Thursday"))
         assert message.summary()["note"] is None
         assert message.summary(reveal_note=True)["note"] == "call back Thursday"
 
@@ -241,14 +235,16 @@ class TestRecordingFromACall:
         return CallResult(**{**base, **kw})
 
     def test_an_escalated_call_is_classified_as_escalated(self) -> None:
-        assert outcome_for(
-            self._result(escalated=True, escalation_reason="caller_requested_human")
-        ) is CallOutcome.ESCALATED
+        assert (
+            outcome_for(self._result(escalated=True, escalation_reason="caller_requested_human"))
+            is CallOutcome.ESCALATED
+        )
 
     def test_a_dependency_failure_is_classified_as_failed(self) -> None:
-        assert outcome_for(
-            self._result(escalated=True, escalation_reason="dependency_failure")
-        ) is CallOutcome.FAILED
+        assert (
+            outcome_for(self._result(escalated=True, escalation_reason="dependency_failure"))
+            is CallOutcome.FAILED
+        )
 
     def test_an_ordinary_call_is_no_action_until_booking_exists(self) -> None:
         """Showing a booking count that nothing produces would be dishonest."""
@@ -263,8 +259,12 @@ class TestRecordingFromACall:
         ]
 
         record = record_call(
-            tenant, self._result(), store, history=history,
-            caller_number="+15551234541", duration_seconds=95.0,
+            tenant,
+            self._result(),
+            store,
+            history=history,
+            caller_number="+15551234541",
+            duration_seconds=95.0,
         )
 
         assert record.has_transcript
@@ -280,8 +280,12 @@ class TestRecordingFromACall:
         with tempfile.TemporaryDirectory() as tmp:
             audit = AuditLog(root=tmp)
             record_call(
-                tenant, self._result(), store,
-                caller_number="+15551234541", duration_seconds=12.0, audit=audit,
+                tenant,
+                self._result(),
+                store,
+                caller_number="+15551234541",
+                duration_seconds=12.0,
+                audit=audit,
             )
             entries = list(audit.read(tenant))
 
@@ -294,7 +298,9 @@ class TestRecordingFromACall:
             "c-1", [Utterance(text=PHI("a")), Utterance(text=PHI("b")), Utterance(text=PHI("c"))]
         )
         assert [t.speaker for t in transcript.turns] == [
-            Speaker.CALLER, Speaker.AGENT, Speaker.CALLER
+            Speaker.CALLER,
+            Speaker.AGENT,
+            Speaker.CALLER,
         ]
 
     def test_taking_a_message_records_it(self) -> None:
@@ -328,36 +334,35 @@ class TestBookingOutcomes:
         )
 
     def test_a_booking_produces_the_booked_outcome(self) -> None:
-        assert outcome_for(self._result(), self._appointment()) is (
-            CallOutcome.APPOINTMENT_BOOKED
-        )
+        assert outcome_for(self._result(), self._appointment()) is (CallOutcome.APPOINTMENT_BOOKED)
 
     def test_a_reschedule_produces_the_moved_outcome(self) -> None:
         from ait_voice.core.scheduling import AppointmentStatus
 
-        assert outcome_for(
-            self._result(), self._appointment(AppointmentStatus.RESCHEDULED)
-        ) is CallOutcome.APPOINTMENT_RESCHEDULED
+        assert (
+            outcome_for(self._result(), self._appointment(AppointmentStatus.RESCHEDULED))
+            is CallOutcome.APPOINTMENT_RESCHEDULED
+        )
 
     def test_a_cancellation_produces_the_cancelled_outcome(self) -> None:
         from ait_voice.core.scheduling import AppointmentStatus
 
-        assert outcome_for(
-            self._result(), self._appointment(AppointmentStatus.CANCELLED)
-        ) is CallOutcome.APPOINTMENT_CANCELLED
+        assert (
+            outcome_for(self._result(), self._appointment(AppointmentStatus.CANCELLED))
+            is CallOutcome.APPOINTMENT_CANCELLED
+        )
 
     def test_an_unmapped_status_does_not_claim_a_booking(self) -> None:
         from ait_voice.core.scheduling import AppointmentStatus
 
-        assert outcome_for(
-            self._result(), self._appointment(AppointmentStatus.NO_SHOW)
-        ) is CallOutcome.NO_ACTION
+        assert (
+            outcome_for(self._result(), self._appointment(AppointmentStatus.NO_SHOW))
+            is CallOutcome.NO_ACTION
+        )
 
     def test_escalation_wins_over_a_booking(self) -> None:
         """Somebody still has to pick up the phone; a green tick would hide that."""
-        escalated = self._result(
-            escalated=True, escalation_reason="caller_requested_human"
-        )
+        escalated = self._result(escalated=True, escalation_reason="caller_requested_human")
 
         assert outcome_for(escalated, self._appointment()) is CallOutcome.ESCALATED
 
@@ -365,9 +370,7 @@ class TestBookingOutcomes:
         store = CallStore()
         tenant = _tenant()
 
-        record = record_call(
-            tenant, self._result(), store, appointment=self._appointment()
-        )
+        record = record_call(tenant, self._result(), store, appointment=self._appointment())
 
         assert record.appointment_id == "a-1"
         assert record.outcome is CallOutcome.APPOINTMENT_BOOKED
@@ -409,8 +412,11 @@ class TestBookingOutcomes:
         with tempfile.TemporaryDirectory() as tmp:
             audit = AuditLog(root=tmp)
             record_call(
-                tenant, self._result(), store,
-                appointment=self._appointment(AppointmentStatus.CANCELLED), audit=audit,
+                tenant,
+                self._result(),
+                store,
+                appointment=self._appointment(AppointmentStatus.CANCELLED),
+                audit=audit,
             )
             events = [e["event"] for e in audit.read(tenant)]
 

@@ -56,7 +56,7 @@ def _context(**kw) -> HandoffContext:  # noqa: ANN003
 
 
 class TestAvailabilityDecision:
-    """"Is a human available now?" — the question the flow calls unobvious."""
+    """ "Is a human available now?" — the question the flow calls unobvious."""
 
     def test_a_staffed_clinic_with_a_number_transfers(self) -> None:
         decision = decide_handoff(_config(), now=WEDNESDAY)
@@ -99,9 +99,7 @@ class TestAvailabilityDecision:
 
 class TestSpokenPromise:
     def test_a_transfer_says_it_is_putting_them_through(self) -> None:
-        promise = spoken_promise(
-            HandoffDecision(HandoffMethod.TRANSFERRED, transfer_to="+1555")
-        )
+        promise = spoken_promise(HandoffDecision(HandoffMethod.TRANSFERRED, transfer_to="+1555"))
         assert "put you through" in promise.lower()
 
     def test_the_callback_is_worded_as_the_clinic_calling(self) -> None:
@@ -195,11 +193,15 @@ class TestQueue:
         decision = HandoffDecision(HandoffMethod.MESSAGE_TAKEN)
 
         queue.add(
-            tenant, _context(call_id="old", urgency=Urgency.ROUTINE), decision,
+            tenant,
+            _context(call_id="old", urgency=Urgency.ROUTINE),
+            decision,
             at=WEDNESDAY - timedelta(hours=2),
         )
         queue.add(
-            tenant, _context(call_id="clinical", urgency=Urgency.CLINICAL), decision,
+            tenant,
+            _context(call_id="clinical", urgency=Urgency.CLINICAL),
+            decision,
             at=WEDNESDAY,
         )
 
@@ -212,7 +214,9 @@ class TestQueue:
 
         queue.add(tenant, _context(call_id="second"), decision, at=WEDNESDAY)
         queue.add(
-            tenant, _context(call_id="first"), decision,
+            tenant,
+            _context(call_id="first"),
+            decision,
             at=WEDNESDAY - timedelta(hours=1),
         )
 
@@ -232,9 +236,7 @@ class TestQueue:
         assert len(queue.all(tenant)) == 1
 
     def test_acknowledging_an_unknown_handoff_returns_none(self) -> None:
-        assert HandoffQueue().acknowledge(
-            _config().context(), "ghost", by="reception"
-        ) is None
+        assert HandoffQueue().acknowledge(_config().context(), "ghost", by="reception") is None
 
     def test_the_queue_summary_carries_no_phi(self) -> None:
         queue = HandoffQueue()

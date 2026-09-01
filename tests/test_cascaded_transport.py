@@ -11,6 +11,7 @@ from ait_voice.providers.base import DialogSession, DialogTransport, ProviderSet
 from ait_voice.providers.cascaded import CascadedTransport, transport_for
 from ait_voice.providers.conversation_relay import ConversationRelayTransport
 from ait_voice.providers.offline import (
+    CollectingSink,
     OfflineLLM,
     OfflineSTT,
     OfflineTelephony,
@@ -98,12 +99,16 @@ class TestSession:
 
         await session.speak(Utterance(text=PHI("some words to synthesise")))
 
-        assert session._sink.total_bytes > 0  # noqa: SLF001
+        sink = session._sink  # noqa: SLF001
+        assert isinstance(sink, CollectingSink)
+        assert sink.total_bytes > 0
 
     async def test_closing_closes_the_sink(self) -> None:
         session = await CascadedTransport(_set()).open(_tenant(), "c-6")
         await session.close()
-        assert session._sink.closed  # noqa: SLF001
+        sink = session._sink  # noqa: SLF001
+        assert isinstance(sink, CollectingSink)
+        assert sink.closed
 
 
 class TestProviderSetDescribe:

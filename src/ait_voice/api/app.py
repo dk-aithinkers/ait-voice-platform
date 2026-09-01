@@ -21,8 +21,9 @@ parameter convention, and it is what makes a separate client safe to add.
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from ait_voice.api.auth import (
     AuthError,
@@ -173,9 +174,7 @@ def create_app(
         allowed = {"clinic_name", "greeting", "escalation_number", "out_of_hours"}
         unknown = set(changes) - allowed
         if unknown:
-            raise HTTPException(
-                status_code=400, detail=f"unknown field(s): {sorted(unknown)}"
-            )
+            raise HTTPException(status_code=400, detail=f"unknown field(s): {sorted(unknown)}")
         updated = services.tenants.update(tenant.tenant_id, **changes)
         return _clinic_json(updated)
 
@@ -203,9 +202,7 @@ def create_app(
         }
 
     @app.get("/api/summary")
-    def activity(
-        tenant: Scope, days: Annotated[int, Query(ge=1, le=90)] = 7
-    ) -> dict[str, Any]:
+    def activity(tenant: Scope, days: Annotated[int, Query(ge=1, le=90)] = 7) -> dict[str, Any]:
         summary = services.calls.summarize(tenant, window_days=days)
         return {
             "window_days": summary.window_days,
@@ -221,9 +218,7 @@ def create_app(
     # -- messages --------------------------------------------------------
 
     @app.get("/api/messages")
-    def list_messages(
-        tenant: Scope, open_only: bool = False
-    ) -> list[dict[str, Any]]:
+    def list_messages(tenant: Scope, open_only: bool = False) -> list[dict[str, Any]]:
         """The callback queue. Notes are revealed here — this is the detail view."""
         return [
             m.summary(reveal_note=True)
@@ -237,9 +232,7 @@ def create_app(
         Writable by a clinic user, which is the one exception to the read-only
         clinic surface: the obligation is theirs, so discharging it must be too.
         """
-        resolved = services.calls.resolve_message(
-            tenant, message_id, at=datetime.now(UTC)
-        )
+        resolved = services.calls.resolve_message(tenant, message_id, at=datetime.now(UTC))
         if resolved is None:
             raise HTTPException(status_code=404, detail="no such message")
         return resolved.summary(reveal_note=True)
@@ -306,11 +299,7 @@ def create_app(
         Summaries only — no PHI. The briefing is fetched per record, so a list
         left open on a screen does not display what every caller said.
         """
-        records = (
-            services.handoffs.pending(tenant)
-            if open_only
-            else services.handoffs.all(tenant)
-        )
+        records = services.handoffs.pending(tenant) if open_only else services.handoffs.all(tenant)
         return [record.summary() for record in records]
 
     @app.get("/api/handoffs/{handoff_id}")
@@ -327,18 +316,14 @@ def create_app(
         return {**record.summary(), "briefing": record.context.for_human()}
 
     @app.post("/api/handoffs/{handoff_id}/acknowledge")
-    def acknowledge_handoff(
-        tenant: Scope, principal: Me, handoff_id: str
-    ) -> dict[str, Any]:
+    def acknowledge_handoff(tenant: Scope, principal: Me, handoff_id: str) -> dict[str, Any]:
         """Mark that a person has picked this up.
 
         Writable by a clinic user: the obligation is theirs, so recording that
         they met it must be theirs too — the same exception the callback queue
         already makes.
         """
-        record = services.handoffs.acknowledge(
-            tenant, handoff_id, by=principal.principal_id
-        )
+        record = services.handoffs.acknowledge(tenant, handoff_id, by=principal.principal_id)
         if record is None:
             raise HTTPException(status_code=404, detail="no such handoff")
         return record.summary()
@@ -387,14 +372,12 @@ def create_app(
         return {"status": "ok"}
 
     @app.exception_handler(SlotUnavailable)
-    def slot_taken(_request, exc: SlotUnavailable):  # noqa: ANN001, ANN202
+    def slot_taken(_request: Request, exc: SlotUnavailable) -> JSONResponse:
         """409 with the alternatives attached, never a bare refusal.
 
         FR2.5 requires alternatives to be offered, and a caller told only "no"
         is the outcome the acceptance criteria forbid.
         """
-        from fastapi.responses import JSONResponse
-
         return JSONResponse(
             status_code=409,
             content={

@@ -186,9 +186,7 @@ class HandoffDecision:
         return self.method is HandoffMethod.TRANSFERRED
 
 
-def decide_handoff(
-    config: TenantConfig, *, now: datetime | None = None
-) -> HandoffDecision:
+def decide_handoff(config: TenantConfig, *, now: datetime | None = None) -> HandoffDecision:
     """Transfer if a person is there; otherwise take a message."""
     route = config.escalation_route(now)
     # Order matters, and not for style: OutOfHoursPolicy is a StrEnum, so
@@ -197,9 +195,7 @@ def decide_handoff(
     # discrimination rather than one branch that always wins.
     if isinstance(route, OutOfHoursPolicy):
         if route is OutOfHoursPolicy.EXISTING_AFTER_HOURS:
-            return HandoffDecision(
-                method=HandoffMethod.EXISTING_SERVICE, policy=route
-            )
+            return HandoffDecision(method=HandoffMethod.EXISTING_SERVICE, policy=route)
         # TRANSFER_ANYWAY with no number configured also lands here. A message
         # is the safe failure: dialling nothing rings in an empty room, and the
         # caller would hear it.
@@ -263,9 +259,7 @@ class HandoffRecord:
             "method": str(self.decision.method),
             "at": self.at.isoformat(),
             "is_open": self.is_open,
-            "acknowledged_at": self.acknowledged_at.isoformat()
-            if self.acknowledged_at
-            else None,
+            "acknowledged_at": self.acknowledged_at.isoformat() if self.acknowledged_at else None,
             "turns": self.context.turns,
         }
 

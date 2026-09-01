@@ -161,9 +161,7 @@ class Appointment:
         # No leading zero on the hour: "9:30", not "09:30", because this is
         # spoken aloud rather than displayed.
         hour = local.strftime("%I").lstrip("0") or "12"
-        return (
-            f"{local.strftime('%A %-d %B')} at {hour}:{local.strftime('%M %p').lower()}"
-        )
+        return f"{local.strftime('%A %-d %B')} at {hour}:{local.strftime('%M %p').lower()}"
 
     def summary(self) -> dict[str, object]:
         """List shape. Carries no PHI — a name is not needed to show a diary."""
@@ -334,9 +332,7 @@ class Calendar:
                 raise AppointmentNotFound(appointment_id)
             if when == existing.starts_at:
                 return existing
-            self._validate_slot(
-                tenant, config, hours, when, moment, ignoring=appointment_id
-            )
+            self._validate_slot(tenant, config, hours, when, moment, ignoring=appointment_id)
             moved = replace(
                 existing,
                 starts_at=when,
@@ -346,9 +342,7 @@ class Calendar:
             self._appointments.put(tenant, appointment_id, moved)
             return moved
 
-    def cancel(
-        self, tenant: TenantContext, appointment_id: str
-    ) -> Appointment:
+    def cancel(self, tenant: TenantContext, appointment_id: str) -> Appointment:
         """Cancel — FR2.3. The row stays; the clinic needs to know it happened."""
         with self._lock:
             existing = self._appointments.get(tenant, appointment_id)
@@ -411,6 +405,4 @@ class Calendar:
             )
 
     def __iter__(self) -> Iterator[str]:
-        raise TypeError(
-            "Calendar is not iterable without tenant context. Use active(tenant)."
-        )
+        raise TypeError("Calendar is not iterable without tenant context. Use active(tenant).")

@@ -53,13 +53,9 @@ def _from_status(provider: str, status: int) -> Reachability:
     if status == 200:
         return Reachability(provider, True, True, "credential accepted")
     if status in (401, 403):
-        return Reachability(
-            provider, True, False, f"HTTP {status} — the key is set but rejected"
-        )
+        return Reachability(provider, True, False, f"HTTP {status} — the key is set but rejected")
     if status == 429:
-        return Reachability(
-            provider, True, False, f"HTTP {status} — rate limited or out of quota"
-        )
+        return Reachability(provider, True, False, f"HTTP {status} — rate limited or out of quota")
     return Reachability(provider, True, False, f"HTTP {status}")
 
 
@@ -89,9 +85,7 @@ async def _check_elevenlabs(client: httpx.AsyncClient) -> Reachability:
     key = os.environ.get("ELEVENLABS_API_KEY")
     if not key:
         return _missing("elevenlabs", "ELEVENLABS_API_KEY is not set")
-    response = await client.get(
-        "https://api.elevenlabs.io/v1/user", headers={"xi-api-key": key}
-    )
+    response = await client.get("https://api.elevenlabs.io/v1/user", headers={"xi-api-key": key})
     return _from_status("elevenlabs", response.status_code)
 
 
@@ -122,6 +116,7 @@ async def verify_all(providers: list[str] | None = None) -> list[Reachability]:
     """Ask each vendor whether our credential works. Never returns key material."""
     wanted = providers or list(CHECKS)
     async with httpx.AsyncClient(timeout=TIMEOUT_SECONDS) as client:
+
         async def run(name: str) -> Reachability:
             try:
                 return await CHECKS[name](client)

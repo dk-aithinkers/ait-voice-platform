@@ -26,6 +26,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from typing import Any
 
 from ait_voice.core.tenancy import TenantScoped
 from ait_voice.core.types import PHI, TenantContext
@@ -151,10 +152,7 @@ class Transcript:
         detail endpoint and the content store, both of which have already
         established that this tenant may see this call.
         """
-        return [
-            {"speaker": str(turn.speaker), "text": turn.text.reveal()}
-            for turn in self.turns
-        ]
+        return [{"speaker": str(turn.speaker), "text": turn.text.reveal()} for turn in self.turns]
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,9 +185,7 @@ class Message:
             "message_id": self.message_id,
             "call_id": self.call_id,
             "taken_at": self.taken_at.isoformat(),
-            "caller_masked": mask_number(self.caller.reveal())
-            if self.caller
-            else "unknown",
+            "caller_masked": mask_number(self.caller.reveal()) if self.caller else "unknown",
             "note": self.note.reveal() if (reveal_note and self.note) else None,
             "is_open": self.is_open,
             "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
@@ -258,9 +254,7 @@ class CallStore:
 
     # -- transcripts -----------------------------------------------------
 
-    def attach_transcript(
-        self, tenant: TenantContext, transcript: Transcript
-    ) -> CallRecord | None:
+    def attach_transcript(self, tenant: TenantContext, transcript: Transcript) -> CallRecord | None:
         """Store a transcript and mark its record as having one.
 
         Returns the updated record, or None when no such call exists for this
@@ -284,9 +278,7 @@ class CallStore:
         """
         removed = self._transcripts.delete(tenant, call_id)
         if record := self.get(tenant, call_id):
-            self._records.put(
-                tenant, call_id, replace_record(record, has_transcript=False)
-            )
+            self._records.put(tenant, call_id, replace_record(record, has_transcript=False))
         return removed
 
     # -- messages --------------------------------------------------------
@@ -294,9 +286,7 @@ class CallStore:
     def add_message(self, tenant: TenantContext, message: Message) -> Message:
         return self._messages.put(tenant, message.message_id, message)
 
-    def messages(
-        self, tenant: TenantContext, *, open_only: bool = False
-    ) -> list[Message]:
+    def messages(self, tenant: TenantContext, *, open_only: bool = False) -> list[Message]:
         found = self._messages.values(tenant)
         if open_only:
             found = [m for m in found if m.is_open]
@@ -339,18 +329,14 @@ class CallStore:
             appointments_changed=sum(1 for r in records if r.outcome in changed),
             escalated=sum(1 for r in records if r.escalated),
             messages_open=len(self.messages(tenant, open_only=True)),
-            average_duration_seconds=(sum(durations) / len(durations))
-            if durations
-            else 0.0,
+            average_duration_seconds=(sum(durations) / len(durations)) if durations else 0.0,
         )
 
     def __iter__(self) -> Iterator[str]:
-        raise TypeError(
-            "CallStore is not iterable without tenant context. Use recent(tenant)."
-        )
+        raise TypeError("CallStore is not iterable without tenant context. Use recent(tenant).")
 
 
-def replace_record(record: CallRecord, **changes: object) -> CallRecord:
+def replace_record(record: CallRecord, **changes: Any) -> CallRecord:
     from dataclasses import replace
 
     return replace(record, **changes)

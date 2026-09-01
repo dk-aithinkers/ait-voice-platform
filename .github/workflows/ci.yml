@@ -1,0 +1,144 @@
+# The merge gate.
+#
+# `team.md`: "Because there is no second human reader, the merge gate — not a
+# pull request review — is the reviewer… CI status checks are what actually
+# stand in for the missing review, and are required on every merge including
+# the owner's own."
+#
+# So these jobs are not advice. Turn on branch protection for `main` requiring
+# every job below, with "include administrators" enabled — a rule the only
+# committer can bypass silently is a suggestion, not a gate.
+#
+# Nothing here deploys. Nothing here needs a credential: the whole suite runs
+# against the offline providers, so a fork's pull request is safe to build.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer push supersedes an in-flight run on the same ref. On `main` it does
+  # not, because that run is the record of whether main is green.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  # Never let a developer's real .env leak into a run, and never let a missing
+  # one change behaviour: the suite runs offline either way.
+  AIT_LOG_LEVEL: WARNING
+
+jobs:
+  python:
+    name: Python — lint, types, tests, coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Ruff
+        run: uv run ruff check --output-format=github .
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+      - name: Types
+        # `team.md` names mypy/pyright as a compensating control for having no
+        # second reader. src is strict; tests are relaxed for annotations only.
+        run: uv run mypy
+
+      - name: Tests
+        run: uv run pytest -q --cov --cov-report=json --cov-report=term
+
+      - name: Per-package coverage floor
+        # Not --cov-fail-under: that gates the repository total, which is the
+        # number `team.md` explicitly rejects.
+        run: uv run python scripts/check_coverage.py
+
+  compliance:
+    name: Compliance — BAA register
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: BAA register is well formed
+        # Audit mode. The stricter --require-signed gate belongs on the
+        # production deploy, and is expected to block until D-05 completes.
+        run: uv run python scripts/check_baa.py
+
+  security:
+    name: Security — secrets and dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # gitleaks needs history to scan commits, not just the tree. A secret
+          # committed and then removed is still a leaked secret.
+          fetch-depth: 0
+
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: astral-sh/setup-uv@v5
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Python dependency audit
+        # Audit the resolved lockfile rather than the environment: pip-audit
+        # cannot inspect the local editable package, and the lockfile is what
+        # actually gets installed anywhere else.
+        run: |
+          uv export --no-emit-project --format requirements-txt > /tmp/requirements.txt
+          uv run pip-audit --strict -r /tmp/requirements.txt
+
+  web:
+    name: Web — lint, types, tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Audit
+        # The frontend ships to a browser holding PHI on screen; a vulnerable
+        # dependency here is not only a build-tooling problem.
+        run: npm audit --audit-level=moderate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        # `tsc -b && vite build` — the typecheck is part of this.
+        run: npm run build

@@ -17,6 +17,10 @@ from __future__ import annotations
 
 import os
 
+# The vendor SDK's own types stop at this boundary — which is the point
+# of having one. `Any` is confined to this file and its siblings.
+from typing import Any
+
 from ait_voice.core.types import PHI, TenantContext, Utterance
 from ait_voice.providers.base import BAANotConfirmedError
 
@@ -47,9 +51,9 @@ class AnthropicLLM:
         self._model = model
         self._max_tokens = max_tokens
         self._baa_confirmed = baa_confirmed
-        self._client = None
+        self._client: Any | None = None
 
-    def _get_client(self):  # noqa: ANN202 - vendor type stays inside the boundary
+    def _get_client(self) -> Any:
         if self._client is None:
             from anthropic import AsyncAnthropic
 

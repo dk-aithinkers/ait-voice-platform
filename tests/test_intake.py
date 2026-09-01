@@ -28,9 +28,7 @@ from ait_voice.core.types import PHI, Region
 
 
 def _tenant(tenant_id: str = "northside"):  # noqa: ANN202
-    return TenantConfig(
-        tenant_id=tenant_id, region=Region.US, clinic_name="Northside"
-    ).context()
+    return TenantConfig(tenant_id=tenant_id, region=Region.US, clinic_name="Northside").context()
 
 
 def _complete(session: IntakeSession) -> IntakeSession:
@@ -95,9 +93,7 @@ class TestConfirmationIsStructural:
             session.completed(call_id="c-1", tenant_id="northside")
 
     def test_a_complete_session_produces_a_record(self) -> None:
-        record = _complete(IntakeSession()).completed(
-            call_id="c-1", tenant_id="northside"
-        )
+        record = _complete(IntakeSession()).completed(call_id="c-1", tenant_id="northside")
 
         assert record.get(FieldName.FULL_NAME) == "Priya Sharma"
         assert record.get(FieldName.DATE_OF_BIRTH) == date(1985, 3, 4)
@@ -135,9 +131,7 @@ class TestSpokenReadBack:
     """The read-back exists to catch mishearings, so it must be sayable."""
 
     def test_a_date_is_spoken_as_a_person_says_it(self) -> None:
-        assert speak_date(date(1985, 3, 4)) == (
-            "the fourth of March, nineteen eighty-five"
-        )
+        assert speak_date(date(1985, 3, 4)) == ("the fourth of March, nineteen eighty-five")
 
     def test_transposed_day_and_month_sound_different(self) -> None:
         """The single most common intake error, and the reason for all this."""
@@ -176,6 +170,7 @@ class TestSpokenReadBack:
         session = IntakeSession()
         readback = session.capture(FieldName.DATE_OF_BIRTH, "1985-03-04")
 
+        assert readback is not None, "an identifier must produce a read-back"
         assert readback.endswith("Is that right?")
         assert "fourth of March" in readback
 
@@ -307,9 +302,7 @@ class TestPHIHandling:
 
     def test_the_summary_shows_which_fields_exist_not_their_values(self) -> None:
         """A front-desk screen should not display a date of birth."""
-        record = _complete(IntakeSession()).completed(
-            call_id="c-1", tenant_id="northside"
-        )
+        record = _complete(IntakeSession()).completed(call_id="c-1", tenant_id="northside")
 
         rendered = str(record.summary())
         assert "Priya" not in rendered
@@ -317,9 +310,7 @@ class TestPHIHandling:
         assert "full_name" in rendered
 
     def test_the_clinician_view_reveals_deliberately(self) -> None:
-        record = _complete(IntakeSession()).completed(
-            call_id="c-1", tenant_id="northside"
-        )
+        record = _complete(IntakeSession()).completed(call_id="c-1", tenant_id="northside")
 
         revealed = record.for_clinician()
         assert revealed["full_name"] == "Priya Sharma"
@@ -340,9 +331,7 @@ class TestNoNationalIdentifier:
         names = {str(spec.name) for spec in FIELDS}
 
         assert not any(
-            token in name
-            for name in names
-            for token in ("ssn", "social", "aadhaar", "national")
+            token in name for name in names for token in ("ssn", "social", "aadhaar", "national")
         )
 
     def test_the_field_set_is_closed(self) -> None:
@@ -356,9 +345,7 @@ class TestStoreIsolation:
     def test_one_clinic_cannot_read_anothers_intake(self) -> None:
         store = IntakeStore()
         north, park = _tenant("northside"), _tenant("parkclinic")
-        record = _complete(IntakeSession()).completed(
-            call_id="c-1", tenant_id="northside"
-        )
+        record = _complete(IntakeSession()).completed(call_id="c-1", tenant_id="northside")
         store.add(north, record)
 
         assert store.get(north, record.intake_id) is not None
@@ -368,23 +355,17 @@ class TestStoreIsolation:
     def test_intake_can_be_found_by_call(self) -> None:
         store = IntakeStore()
         tenant = _tenant()
-        record = _complete(IntakeSession()).completed(
-            call_id="c-1", tenant_id="northside"
-        )
+        record = _complete(IntakeSession()).completed(call_id="c-1", tenant_id="northside")
         store.add(tenant, record)
 
-        assert [r.intake_id for r in store.for_call(tenant, "c-1")] == [
-            record.intake_id
-        ]
+        assert [r.intake_id for r in store.for_call(tenant, "c-1")] == [record.intake_id]
         assert store.for_call(tenant, "c-other") == []
 
     def test_intake_is_erasable(self) -> None:
         """Intake is content, and DPDP erasure applies to content."""
         store = IntakeStore()
         tenant = _tenant()
-        record = _complete(IntakeSession()).completed(
-            call_id="c-1", tenant_id="northside"
-        )
+        record = _complete(IntakeSession()).completed(call_id="c-1", tenant_id="northside")
         store.add(tenant, record)
 
         assert store.erase(tenant, record.intake_id)
@@ -393,9 +374,7 @@ class TestStoreIsolation:
     def test_one_clinic_cannot_erase_anothers_intake(self) -> None:
         store = IntakeStore()
         north, park = _tenant("northside"), _tenant("parkclinic")
-        record = _complete(IntakeSession()).completed(
-            call_id="c-1", tenant_id="northside"
-        )
+        record = _complete(IntakeSession()).completed(call_id="c-1", tenant_id="northside")
         store.add(north, record)
 
         assert store.erase(park, record.intake_id) is False
