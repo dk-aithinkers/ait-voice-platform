@@ -230,3 +230,57 @@ class TestTwilioNeedsBothHalves:
         _, statuses = build_registry(regions=[Region.US], baa_register={})
 
         assert next(s for s in statuses if s.leg == "telephony").real
+
+
+class TestBundledRegionSelection:
+    """A bundle is opt-in per region — that is the whole C-T1 accommodation."""
+
+    def test_a_region_can_be_served_by_conversationrelay(self) -> None:
+        registry, statuses = build_registry(
+            regions=[Region.INDIA],
+            baa_register={},
+            bundled_regions=[Region.INDIA],
+        )
+
+        providers = registry.for_tenant(
+            TenantContext(tenant_id="t", region=Region.INDIA)
+        )
+        assert providers.is_bundled
+        assert providers.dialog.name == "twilio-conversationrelay"
+        assert any(s.leg == "dialog" for s in statuses)
+
+    def test_the_llm_stays_ours_in_a_bundle(self) -> None:
+        """ConversationRelay takes the speech legs, not the dialog policy."""
+        _, statuses = build_registry(
+            regions=[Region.INDIA], baa_register={}, bundled_regions=[Region.INDIA]
+        )
+        assert any(s.leg == "llm" for s in statuses)
+
+    def test_regions_not_listed_keep_the_cascade(self) -> None:
+        """The realistic deployment: bundle US, keep India swappable."""
+        registry, _ = build_registry(
+            regions=[Region.US, Region.INDIA],
+            baa_register={},
+            bundled_regions=[Region.US],
+        )
+
+        us = registry.for_tenant(TenantContext(tenant_id="t", region=Region.US))
+        india = registry.for_tenant(TenantContext(tenant_id="t", region=Region.INDIA))
+
+        assert us.is_bundled
+        assert not india.is_bundled
+
+    def test_no_bundling_by_default(self) -> None:
+        registry, _ = build_registry(regions=[Region.US], baa_register={})
+        assert not registry.for_tenant(
+            TenantContext(tenant_id="t", region=Region.US)
+        ).is_bundled
+
+    def test_the_bundle_carries_the_baa_verdict(self) -> None:
+        _, statuses = build_registry(
+            regions=[Region.US],
+            baa_register={"twilio": False},
+            bundled_regions=[Region.US],
+        )
+        dialog = next(s for s in statuses if s.leg == "dialog")
+        assert "NOT confirmed" in dialog.reason

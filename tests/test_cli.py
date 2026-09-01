@@ -187,7 +187,7 @@ class TestLiveRefusal:
 
         monkeypatch.setattr("ait_voice.cli.load_dotenv_if_present", lambda: False)
 
-        async def boom(region, turns, script):  # noqa: ANN001, ANN202
+        async def boom(region, turns, script, *, relay=False):  # noqa: ANN001, ANN202
             raise BAANotConfirmedError("no BAA for 'elevenlabs'")
 
         monkeypatch.setattr("ait_voice.cli._run_live", boom)
@@ -208,7 +208,7 @@ class TestLiveRun:
         from ait_voice.providers.base import ProviderRegistry
         from ait_voice.providers.offline import offline_provider_set
 
-        def build(*, regions=None, baa_register=None):  # noqa: ANN001, ANN202
+        def build(*, regions=None, baa_register=None, bundled_regions=None):  # noqa: ANN001, ANN202
             registry = ProviderRegistry()
             for region in regions or []:
                 registry.register(region, offline_provider_set(script=["book me in"]))

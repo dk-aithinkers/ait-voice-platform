@@ -69,22 +69,62 @@ def build_registry(
     *,
     regions: list[Region] | None = None,
     baa_register: dict[str, bool] | None = None,
+    bundled_regions: list[Region] | None = None,
 ) -> tuple[ProviderRegistry, list[LegStatus]]:
     """Build a registry, and report which legs are real.
 
     Returns the registry plus a status list, so the caller can show what is
     actually wired rather than leaving it to be discovered mid-call.
+
+    Args:
+        bundled_regions: Regions served by Twilio ConversationRelay instead of
+            the cascaded chain. Opt-in per region by design: a bundle trades
+            C-T1 replaceability for deleted code, and that trade is worth
+            making in one market and not the other.
     """
     baa = baa_register if baa_register is not None else load_baa_register()
+    bundled = set(bundled_regions or [])
     registry = ProviderRegistry()
     statuses: list[LegStatus] = []
 
     for region in regions or [Region.US]:
         providers, region_statuses = _build_set(region, baa)
+        if region in bundled:
+            providers, region_statuses = _bundle(providers, region, baa)
         registry.register(region, providers)
         statuses.extend(region_statuses)
 
     return registry, statuses
+
+
+def _bundle(
+    providers: ProviderSet, region: Region, baa: dict[str, bool]
+) -> tuple[ProviderSet, list[LegStatus]]:
+    """Replace the speech legs with ConversationRelay, keeping our own LLM.
+
+    The dialog stays ours in either shape. ConversationRelay bundles
+    recognition, synthesis and the carrier; it does not take the LLM, which is
+    why the escalation policy and system prompt are unaffected by this choice.
+    """
+    from ait_voice.providers.conversation_relay import ConversationRelayTransport
+
+    relay = ConversationRelayTransport(baa_confirmed=baa.get("twilio", False))
+    bundled = ProviderSet(
+        stt=providers.stt,
+        llm=providers.llm,
+        tts=providers.tts,
+        telephony=providers.telephony,
+        dialog=relay,
+    )
+    llm_status = next(
+        (s for s in _build_set(region, baa)[1] if s.leg == "llm"), None
+    )
+    statuses = [
+        LegStatus("dialog", relay.name, True, _baa_note("twilio", region, baa)),
+    ]
+    if llm_status:
+        statuses.append(llm_status)
+    return bundled, statuses
 
 
 def _build_set(

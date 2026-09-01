@@ -20,6 +20,7 @@ from ait_voice.core.logging import CallLogger
 from ait_voice.core.tenancy import TenantConfig
 from ait_voice.core.types import PHI, TenantContext, TurnTiming, Utterance
 from ait_voice.providers.base import ProviderRegistry, ProviderSet
+from ait_voice.providers.cascaded import transport_for
 
 #: FR1.3 and FR1.4: the AI disclosure and the recording disclosure are spoken at
 #: the start of every call, before any other content, and cannot be removed by
@@ -70,6 +71,11 @@ class CallResult:
     #: policy that applied because nobody was available. Opaque; safe to log.
     escalation_route: str | None = None
     providers: dict[str, str] = field(default_factory=dict)
+    #: False when the transport hands text to a vendor that synthesises
+    #: downstream, so the reply-latency column stops short of the audio the
+    #: caller hears. NFR1.1 numbers from such a run are a floor, not a
+    #: measurement, and must not be compared against a cascaded run as equals.
+    latency_observable: bool = True
 
     @property
     def p95_ms(self) -> float | None:
@@ -131,17 +137,14 @@ class VoicePipeline:
         )
         log.info("call started", providers=result.providers)
 
-        inbound, sink = await providers.telephony.stream(tenant, call_id)
+        transport = transport_for(providers)
+        result.latency_observable = transport.observes_audio
+        session = await transport.open(tenant, call_id)
         history: list[Utterance] = []
 
         try:
             # FR1.3 — disclosure first, before anything else is spoken.
-            await self._speak(
-                tenant,
-                providers,
-                sink,
-                Utterance(text=PHI(self._opening())),
-            )
+            await session.speak(Utterance(text=PHI(self._opening())))
             log.info("disclosure spoken")
 
             # NFR1.1 measures from the caller ceasing speech to the first
@@ -150,10 +153,7 @@ class VoicePipeline:
             # start before the loop body — not after.
             listening_since = time.perf_counter()
 
-            async for caller in providers.stt.transcribe(tenant, inbound):
-                if not caller.is_final:
-                    continue
-
+            async for caller in session.listen():
                 stt_ms = (time.perf_counter() - listening_since) * 1000
                 history.append(caller)
 
@@ -163,11 +163,8 @@ class VoicePipeline:
                 )
                 llm_ms = (time.perf_counter() - llm_start) * 1000
 
-                tts_start = time.perf_counter()
-                first_audio_ms = await self._speak(tenant, providers, sink, reply)
-                tts_ms = first_audio_ms if first_audio_ms else (
-                    time.perf_counter() - tts_start
-                ) * 1000
+                spoken = await session.speak(reply)
+                tts_ms = spoken.elapsed_ms
 
                 history.append(reply)
                 result.turns += 1
@@ -207,18 +204,15 @@ class VoicePipeline:
             result.escalation_route = self._route()
             log.error("dependency failure", error_type=type(exc).__name__)
             try:
-                await self._speak(
-                    tenant,
-                    providers,
-                    sink,
+                await session.speak(
                     Utterance(
                         text=PHI("I'm sorry — I'm having trouble. Let me get you to someone.")
-                    ),
+                    )
                 )
             except Exception:  # noqa: BLE001 - the apology is best-effort
                 log.error("could not speak apology")
         finally:
-            await sink.close()
+            await session.close()
 
         log.info(
             "call ended",
@@ -247,22 +241,6 @@ class VoicePipeline:
             return None
         route = self._config.escalation_route()
         return route if isinstance(route, str) else str(route)
-
-    async def _speak(
-        self,
-        tenant: TenantContext,
-        providers: ProviderSet,
-        sink,  # noqa: ANN001 - AudioSink protocol
-        utterance: Utterance,
-    ) -> float:
-        """Synthesise and play an utterance. Returns time to first audio, in ms."""
-        started = time.perf_counter()
-        first_audio_ms = 0.0
-        async for chunk in providers.tts.synthesize(tenant, utterance):
-            if first_audio_ms == 0.0:
-                first_audio_ms = (time.perf_counter() - started) * 1000
-            await sink.write(chunk)
-        return first_audio_ms
 
     @staticmethod
     def _escalation_reason(reply: Utterance) -> EscalationReason | None:

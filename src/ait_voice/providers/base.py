@@ -124,16 +124,97 @@ class TelephonyProvider(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class SpeechTiming:
+    """How long it took to say something, and whether we could actually tell.
+
+    The distinction is why this is a type rather than a float. NFR1.1 measures
+    to the first *audio* of the reply. On a cascaded chain we synthesise
+    ourselves and observe that moment directly. On a bundled transport we hand
+    text to the carrier and it synthesises downstream, so the only thing we can
+    time is the handoff — the audio happens after our last measurement point.
+
+    Reporting both as one number would make a bundled transport look faster
+    than a cascaded one purely by measuring less of the same journey.
+    ``observed_audio`` keeps that comparison honest.
+    """
+
+    elapsed_ms: float
+    observed_audio: bool = True
+
+
+@runtime_checkable
+class DialogSession(Protocol):
+    """One call's two-way conversation, however it is carried.
+
+    This is the seam that lets a bundled vendor and a three-vendor cascade sit
+    under the same dialog policy. Everything above it — the disclosure,
+    escalation, turn limits, timing — stays identical either way, which matters
+    most for escalation: it is safety-critical, and a second copy of it is a
+    second thing to get wrong.
+    """
+
+    def listen(self) -> AsyncIterator[Utterance]:
+        """Yield the caller's final utterances, as text."""
+        ...
+
+    async def speak(self, utterance: Utterance) -> SpeechTiming:
+        """Say something to the caller."""
+        ...
+
+    async def close(self) -> None:
+        """End the call leg."""
+        ...
+
+
+@runtime_checkable
+class DialogTransport(Protocol):
+    """Opens a :class:`DialogSession` for a call.
+
+    Two shapes implement this. A cascaded transport composes separate STT, TTS
+    and telephony vendors, keeping each independently BAA-able and swappable
+    per C-T1. A bundled transport — Twilio ConversationRelay is the first —
+    collapses all three into one vendor that returns text rather than audio.
+
+    A bundle trades C-T1 replaceability for a large amount of deleted code.
+    That trade is a per-region deployment decision rather than an architectural
+    one, which is exactly why it belongs behind this protocol.
+    """
+
+    name: str
+    #: Whether this transport can observe time to first audio. See SpeechTiming.
+    observes_audio: bool
+
+    async def open(self, tenant: TenantContext, call_id: str) -> DialogSession:
+        """Begin a call leg."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
 class ProviderSet:
-    """The four providers serving one region."""
+    """The providers serving one region.
+
+    ``dialog`` is the escape hatch for a bundled vendor. When it is set the
+    speech legs are unused: a bundle owns recognition, synthesis and the
+    carrier together, and pretending otherwise by routing dummy audio through
+    the cascaded protocols would make this boundary decorative.
+    """
 
     stt: STTProvider
     llm: LLMProvider
     tts: TTSProvider
     telephony: TelephonyProvider
+    dialog: DialogTransport | None = None
+
+    @property
+    def is_bundled(self) -> bool:
+        return self.dialog is not None
 
     def describe(self) -> dict[str, str]:
         """Names only — safe to log, and useful for proving which chain ran."""
+        if self.dialog is not None:
+            # Naming the unused legs here would be a lie in the one record that
+            # exists to prove which vendors actually touched the call.
+            return {"dialog": self.dialog.name, "llm": self.llm.name}
         return {
             "stt": self.stt.name,
             "llm": self.llm.name,
@@ -196,8 +277,11 @@ class ProviderRegistry:
 __all__ = [
     "PHI",
     "AudioSink",
+    "DialogSession",
+    "DialogTransport",
     "LLMProvider",
     "ProviderRegistry",
+    "SpeechTiming",
     "ProviderSet",
     "STTProvider",
     "TTSProvider",

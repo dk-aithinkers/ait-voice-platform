@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 
 from ait_voice.config import build_registry, load_baa_register, load_dotenv_if_present
@@ -67,6 +68,14 @@ def _report(result: CallResult) -> None:
     p95 = result.p95_ms
     verdict = "MEETS" if result.meets_latency_target else "MISSES"
     print(f"  p95 {p95:.0f}ms — {verdict} the NFR1.1 target of 1500ms")
+    if not result.latency_observable:
+        # Without this the bundled run reads as dramatically faster, when what
+        # actually changed is that we stopped measuring the synthesis.
+        print()
+        print("  NOT COMPARABLE to a cascaded run. This transport hands text to")
+        print("  the carrier, which synthesises after our last measurement point,")
+        print("  so the reply column is a floor and excludes the audio the caller")
+        print("  hears. Only the carrier's own analytics can close that gap.")
     print()
 
 
@@ -146,7 +155,9 @@ async def _run(region: Region, turns: int) -> CallResult:
     return await pipeline.handle_call(tenant, call_id="demo-001", max_turns=turns)
 
 
-async def _run_live(region: Region, turns: int, script: list[str]) -> CallResult:
+async def _run_live(
+    region: Region, turns: int, script: list[str], *, relay: bool = False
+) -> CallResult:
     """Call the real vendors, with a synthesised caller in place of a phone.
 
     The BAA gate is not bypassed here. A US tenant reaches the same refusal it
@@ -154,7 +165,11 @@ async def _run_live(region: Region, turns: int, script: list[str]) -> CallResult
     """
     load_dotenv_if_present()
     baa = load_baa_register()
-    registry, statuses = build_registry(regions=[region], baa_register=baa)
+    registry, statuses = build_registry(
+        regions=[region],
+        baa_register=baa,
+        bundled_regions=[region] if relay else None,
+    )
     live = [st for st in statuses if st.real]
     if not live:
         print("  Nothing is wired. Run --doctor to see what is missing.")
@@ -162,6 +177,20 @@ async def _run_live(region: Region, turns: int, script: list[str]) -> CallResult
 
     tenant = TenantContext(tenant_id="demo-clinic", region=region)
     configured: ProviderSet = registry.for_tenant(tenant)
+
+    if relay:
+        # Say this before spending anything on synthesis.
+        print()
+        print("  ConversationRelay needs a real inbound call: Twilio dials our")
+        print("  WebSocket when a call arrives, so the synthesised caller cannot")
+        print("  stand in for it. Serve the TwiML below from your voice webhook and")
+        print("  call the number; this run will wait for that connection.")
+        print()
+        from ait_voice.providers.conversation_relay import RelayConfig, inbound_twiml
+
+        url = os.environ.get("AIT_RELAY_WS_URL", "wss://<your-host>/relay")
+        print(f"  {inbound_twiml(RelayConfig(websocket_url=url))}")
+        print()
 
     print(f"  rendering {len(script)} caller line(s) with {configured.tts.name} ...")
     audio = await render_caller_audio(configured.tts, tenant, script)
@@ -208,6 +237,11 @@ def main(argv: list[str] | None = None) -> int:
         help="call the configured vendors for real (costs money)",
     )
     parser.add_argument(
+        "--relay",
+        action="store_true",
+        help="use Twilio ConversationRelay instead of the cascaded chain",
+    )
+    parser.add_argument(
         "--say",
         action="append",
         default=None,
@@ -223,7 +257,9 @@ def main(argv: list[str] | None = None) -> int:
     region = Region(args.region)
     if args.live:
         try:
-            result = asyncio.run(_run_live(region, args.turns, args.say or DEMO_SCRIPT))
+            result = asyncio.run(
+                _run_live(region, args.turns, args.say or DEMO_SCRIPT, relay=args.relay)
+            )
         except BAANotConfirmedError as refusal:
             # An expected outcome, not a crash: the gate did its job. A
             # traceback here would read as a bug and invite someone to
