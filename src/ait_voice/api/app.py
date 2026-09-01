@@ -32,6 +32,7 @@ from ait_voice.api.auth import (
     resolve_scope,
     seed_from_environment,
 )
+from ait_voice.core.handoff import HandoffQueue
 from ait_voice.core.records import CallStore
 from ait_voice.core.scheduling import (
     AppointmentNotFound,
@@ -58,6 +59,7 @@ class Services:
         principals: PrincipalStore | None = None,
         calendar: Calendar | None = None,
         booking_hours: BookingHours | None = None,
+        handoffs: HandoffQueue | None = None,
     ) -> None:
         self.tenants = tenants or TenantStore()
         self.calls = calls or CallStore()
@@ -67,6 +69,7 @@ class Services:
         # once a clinic asks for different ones; inventing that setting before
         # anyone needs it would be guessing at their diary.
         self.booking_hours = booking_hours or BookingHours()
+        self.handoffs = handoffs or HandoffQueue()
 
 
 def create_app(
@@ -290,6 +293,52 @@ def create_app(
         except AppointmentNotFound as exc:
             raise HTTPException(status_code=404, detail="no such appointment") from exc
         return cancelled.summary()
+
+    # -- handoffs --------------------------------------------------------
+
+    @app.get("/api/handoffs")
+    def list_handoffs(tenant: Scope, open_only: bool = True) -> list[dict[str, Any]]:
+        """The queue of calls waiting for a person.
+
+        Summaries only — no PHI. The briefing is fetched per record, so a list
+        left open on a screen does not display what every caller said.
+        """
+        records = (
+            services.handoffs.pending(tenant)
+            if open_only
+            else services.handoffs.all(tenant)
+        )
+        return [record.summary() for record in records]
+
+    @app.get("/api/handoffs/{handoff_id}")
+    def get_handoff(tenant: Scope, handoff_id: str) -> dict[str, Any]:
+        """The briefing a person reads before picking the call up — C-T6.
+
+        This is the one endpoint that deliberately returns what the caller
+        said. Withholding it is the failure the whole feature exists to
+        prevent, and it is reachable only by a principal scoped to this tenant.
+        """
+        record = services.handoffs.get(tenant, handoff_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="no such handoff")
+        return {**record.summary(), "briefing": record.context.for_human()}
+
+    @app.post("/api/handoffs/{handoff_id}/acknowledge")
+    def acknowledge_handoff(
+        tenant: Scope, principal: Me, handoff_id: str
+    ) -> dict[str, Any]:
+        """Mark that a person has picked this up.
+
+        Writable by a clinic user: the obligation is theirs, so recording that
+        they met it must be theirs too — the same exception the callback queue
+        already makes.
+        """
+        record = services.handoffs.acknowledge(
+            tenant, handoff_id, by=principal.principal_id
+        )
+        if record is None:
+            raise HTTPException(status_code=404, detail="no such handoff")
+        return record.summary()
 
     @app.get("/api/health")
     def health() -> dict[str, str]:

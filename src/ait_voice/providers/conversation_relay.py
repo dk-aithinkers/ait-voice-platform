@@ -261,10 +261,12 @@ class ConversationRelaySession:
     async def close(self, handoff: dict[str, Any] | None = None) -> None:
         """End the session, optionally handing structured data to the next step.
 
-        ``handoffData`` is the mechanism C-T6 wants for a warm transfer: the
-        receiving human gets what the caller already said instead of asking
-        them to repeat it. Payloads are caller-supplied content, so nothing is
-        placed here that the audit log would refuse.
+        ``handoffData`` is C-T6's native mechanism, but it crosses a vendor
+        boundary — so what goes here is
+        :meth:`~ait_voice.core.handoff.HandoffContext.for_vendor`, which
+        carries opaque references and enumerated codes and no PHI. The person
+        who picks the call up reads the real briefing from our own
+        authenticated, tenant-scoped surface.
         """
         if self._closed:
             return

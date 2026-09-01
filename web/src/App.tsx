@@ -12,6 +12,7 @@ import { SignIn } from "./pages/SignIn";
 import { ClinicView } from "./pages/ClinicView";
 import { CallDetail } from "./pages/CallDetail";
 import { Messages } from "./pages/Messages";
+import { Handoffs } from "./pages/Handoffs";
 import { Clinics } from "./pages/Clinics";
 import { ClinicConfig } from "./pages/ClinicConfig";
 import { Loading } from "./components/Common";
@@ -87,6 +88,7 @@ export function App(): ReactNode {
         <nav className="tabs" aria-label="Sections">
           <NavLink to="/clinics">Clinics</NavLink>
           <NavLink to="/">Calls</NavLink>
+          <NavLink to="/handoffs">Waiting</NavLink>
           <NavLink to="/messages">Messages</NavLink>
         </nav>
       ) : null}
@@ -99,6 +101,15 @@ export function App(): ReactNode {
             path="/messages"
             element={
               <Messages
+                tenant={isOperator ? undefined : principal?.tenant_id}
+                isOperator={isOperator}
+              />
+            }
+          />
+          <Route
+            path="/handoffs"
+            element={
+              <Handoffs
                 tenant={isOperator ? undefined : principal?.tenant_id}
                 isOperator={isOperator}
               />

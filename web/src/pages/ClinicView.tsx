@@ -28,6 +28,10 @@ export function ClinicView({ tenant }: { tenant?: string | null }): ReactNode {
     queryKey: ["calls", tenant],
     queryFn: () => api.calls(tenant),
   });
+  const handoffs = useQuery({
+    queryKey: ["handoffs", tenant],
+    queryFn: () => api.handoffs(tenant),
+  });
   const appointments = useQuery({
     queryKey: ["appointments", tenant],
     queryFn: () => api.appointments(tenant),
@@ -38,6 +42,25 @@ export function ClinicView({ tenant }: { tenant?: string | null }): ReactNode {
   return (
     <>
       <h1>{clinic.data?.clinic_name ?? "Clinic"}</h1>
+
+      {handoffs.data && handoffs.data.length > 0 ? (
+        <aside className="banner" aria-live="polite">
+          <span>
+            <strong>{handoffs.data.length}</strong> call
+            {handoffs.data.length === 1 ? "" : "s"} waiting for a person
+            {handoffs.data.some((h) => h.urgency === "clinical")
+              ? " — one is clinical"
+              : ""}
+            .
+          </span>
+          <Link
+            className="button"
+            to={tenant ? `/handoffs?tenant=${encodeURIComponent(tenant)}` : "/handoffs"}
+          >
+            View queue
+          </Link>
+        </aside>
+      ) : null}
 
       {summary.data && summary.data.messages_open > 0 ? (
         <aside className="banner" aria-live="polite">

@@ -13,10 +13,13 @@ from datetime import time
 
 import pytest
 
+from ait_voice.core.handoff import Urgency
 from ait_voice.core.pipeline import (
     ESCALATE_CALLER_REQUEST,
     ESCALATE_CLINICAL,
     ESCALATE_DEPENDENCY,
+    ESCALATE_NOT_UNDERSTOOD,
+    CallEnding,
     VoicePipeline,
 )
 from ait_voice.core.tenancy import OutOfHoursPolicy, StaffedHours, TenantConfig
@@ -346,3 +349,249 @@ class TestTenantConfigDrivesTheCall:
 
         assert result.escalated
         assert result.escalation_route is None
+
+
+class TestRecoveryThenEscalate:
+    """FR5.1 — one recovery attempt, then a person."""
+
+    @staticmethod
+    def _confused_registry(turns: int) -> ProviderRegistry:
+        class ConfusedLLM(OfflineLLM):
+            async def respond(self, tenant, history, *, system_prompt):  # noqa: ANN001
+                return Utterance(text=PHI("Sorry, I didn't catch that."))
+
+        registry = ProviderRegistry()
+        registry.register(
+            Region.US,
+            ProviderSet(
+                stt=OfflineSTT(script=["mumble"] * turns),
+                llm=ConfusedLLM(),
+                tts=OfflineTTS(),
+                telephony=OfflineTelephony(),
+            ),
+        )
+        return registry
+
+    async def test_the_first_failure_is_a_recovery_attempt_not_an_escalation(
+        self,
+    ) -> None:
+        result = await VoicePipeline(self._confused_registry(1)).handle_call(
+            _tenant(), "c-r1"
+        )
+
+        assert result.recovery_attempted
+        assert not result.escalated
+
+    async def test_the_second_failure_escalates(self) -> None:
+        """A second attempt is where a caller decides the thing is broken."""
+        result = await VoicePipeline(self._confused_registry(2)).handle_call(
+            _tenant(), "c-r2"
+        )
+
+        assert result.escalated
+        assert result.escalation_reason == str(ESCALATE_NOT_UNDERSTOOD)
+        assert result.handoff.recovery_attempted
+
+    async def test_a_request_for_a_person_skips_recovery_entirely(self) -> None:
+        """FR5.2 — immediately, with no recovery attempt."""
+        registry = _registry(Region.US, ["Can I speak to a person please?"])
+
+        result = await VoicePipeline(registry).handle_call(_tenant(), "c-r3")
+
+        assert result.escalated
+        assert not result.recovery_attempted
+
+
+class TestNeverEndsUnresolved:
+    """FR5.6 — never end a call without a task, a transfer, or a message."""
+
+    async def test_an_escalated_call_is_resolved(self) -> None:
+        registry = _registry(Region.US, ["Can I speak to a person please?"])
+        result = await VoicePipeline(registry).handle_call(_tenant(), "c-e1")
+
+        assert result.resolved
+        assert result.ending is CallEnding.ESCALATED
+        assert result.handoff_method
+
+    async def test_a_caller_hanging_up_is_not_a_violation(self) -> None:
+        """The requirement is about the system ending a call, not the caller."""
+        registry = _registry(Region.US, ["I'd like to book an appointment"])
+        result = await VoicePipeline(registry).handle_call(_tenant(), "c-e2")
+
+        assert result.ending is CallEnding.CALLER_ENDED
+
+    async def test_the_turn_limit_still_hands_off(self) -> None:
+        """Running out of turns is the agent's problem, not the caller's."""
+        registry = _registry(Region.US, ["hello"] * 6)
+
+        result = await VoicePipeline(registry).handle_call(
+            _tenant(), "c-e3", max_turns=2
+        )
+
+        assert result.escalated
+        assert result.ending is CallEnding.ESCALATED
+
+    async def test_a_dependency_failure_hands_off_after_apologising(self) -> None:
+        """AC5.5.1 — the apology comes first; the briefing is built after."""
+        spoken: list[str] = []
+
+        class FailingLLM(OfflineLLM):
+            async def respond(self, tenant, history, *, system_prompt):  # noqa: ANN001
+                raise ConnectionError("vendor unreachable")
+
+        class RecordingTTS(OfflineTTS):
+            async def synthesize(self, tenant, utterance, *, voice=None):  # noqa: ANN001
+                spoken.append(utterance.text.reveal())
+                async for chunk in super().synthesize(tenant, utterance, voice=voice):
+                    yield chunk
+
+        registry = ProviderRegistry()
+        registry.register(
+            Region.US,
+            ProviderSet(
+                stt=OfflineSTT(script=["Hello?"]),
+                llm=FailingLLM(),
+                tts=RecordingTTS(),
+                telephony=OfflineTelephony(),
+            ),
+        )
+
+        result = await VoicePipeline(registry).handle_call(_tenant(), "c-e4")
+
+        assert result.escalated
+        assert result.resolved
+        assert result.handoff.urgency is Urgency.URGENT
+        # The apology precedes the handoff promise.
+        assert "sorry" in spoken[1].lower()
+
+
+class TestHandoffCarriesContext:
+    """C-T6 — a transfer that makes the caller repeat everything wastes the
+    one thing that earns acceptance."""
+
+    async def test_the_briefing_carries_what_the_caller_said(self) -> None:
+        registry = _registry(
+            Region.US, ["I've had chest pain since this morning"]
+        )
+
+        result = await VoicePipeline(registry).handle_call(_tenant(), "c-h1")
+
+        said = result.handoff.for_human()["said"]
+        assert any("chest pain" in line for line in said)
+
+    async def test_the_briefing_omits_the_agents_own_replies(self) -> None:
+        """Including them doubles what a person has to read."""
+        registry = _registry(Region.US, ["Can I speak to a person please?"])
+
+        result = await VoicePipeline(registry).handle_call(_tenant(), "c-h2")
+
+        said = result.handoff.for_human()["said"]
+        assert not any("put you through" in line.lower() for line in said)
+
+    async def test_clinical_content_is_marked_urgent_for_a_person(self) -> None:
+        registry = _registry(Region.US, ["I've had chest pain since this morning"])
+
+        result = await VoicePipeline(registry).handle_call(_tenant(), "c-h3")
+
+        assert result.handoff.urgency is Urgency.CLINICAL
+
+    async def test_the_result_itself_still_carries_no_phi_when_logged(self) -> None:
+        """CallResult is logged; the briefing must not ride along in its repr."""
+        registry = _registry(Region.US, ["I've had chest pain since this morning"])
+
+        result = await VoicePipeline(registry).handle_call(_tenant(), "c-h4")
+
+        assert "chest pain" not in repr(result)
+
+    async def test_availability_decides_the_method(self) -> None:
+        from datetime import time as clock
+
+        from ait_voice.core.tenancy import OutOfHoursPolicy, StaffedHours
+
+        always = StaffedHours(
+            days=frozenset(range(1, 8)), opens=clock(0, 0), closes=clock(23, 59)
+        )
+        for hours, expected in (
+            (always, "transferred"),
+            (StaffedHours.never(), "message_taken"),
+        ):
+            config = TenantConfig(
+                tenant_id="clinic-1",
+                region=Region.US,
+                clinic_name="Northside",
+                staffed_hours=hours,
+                escalation_number="+15551230000",
+                out_of_hours=OutOfHoursPolicy.TAKE_MESSAGE,
+            )
+            registry = _registry(Region.US, ["Can I speak to a person please?"])
+
+            result = await VoicePipeline(registry, config=config).handle_call(
+                config.context(), "c-h5"
+            )
+
+            assert result.handoff_method == expected
+
+
+class TestHandoffFailureIsNotMasked:
+    async def test_a_handoff_that_itself_fails_still_records_the_escalation(
+        self,
+    ) -> None:
+        """Two failures in a row must not leave the call looking healthy."""
+
+        class FailingLLM(OfflineLLM):
+            async def respond(self, tenant, history, *, system_prompt):  # noqa: ANN001
+                raise ConnectionError("vendor unreachable")
+
+        class FailingTTS(OfflineTTS):
+            async def synthesize(self, tenant, utterance, *, voice=None):  # noqa: ANN001
+                raise ConnectionError("tts unreachable")
+                yield b""  # pragma: no cover - defines the generator
+
+        registry = ProviderRegistry()
+        registry.register(
+            Region.US,
+            ProviderSet(
+                stt=OfflineSTT(script=["Hello?"]),
+                llm=FailingLLM(),
+                tts=FailingTTS(),
+                telephony=OfflineTelephony(),
+            ),
+        )
+
+        result = await VoicePipeline(registry).handle_call(_tenant(), "c-double")
+
+        assert result.escalated
+        assert result.escalation_reason == str(ESCALATE_DEPENDENCY)
+
+    async def test_an_unaccounted_ending_raises(self) -> None:
+        """FR5.6's backstop, exercised directly.
+
+        A future `break` added without resolving the call would land here, and
+        the point of the invariant is that it fails loudly instead of dropping
+        a caller silently.
+        """
+        from ait_voice.core.handoff import UnresolvedCall
+        from ait_voice.core.pipeline import CallResult
+
+        registry = _registry(Region.US, ["hello"])
+        pipeline = VoicePipeline(registry)
+
+        # Simulate the loop exiting without setting an ending.
+        original = CallResult.__init__
+
+        def unresolved(self, *args, **kwargs):  # noqa: ANN001, ANN202
+            original(self, *args, **kwargs)
+            self.ending = None
+
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(
+                "ait_voice.core.pipeline.VoicePipeline._escalate",
+                _leave_unresolved,
+            )
+            with pytest.raises(UnresolvedCall, match="FR5.6"):
+                await pipeline.handle_call(_tenant(), "c-unresolved", max_turns=1)
+
+
+async def _leave_unresolved(*args, **kwargs) -> None:  # noqa: ANN002, ANN003
+    """An _escalate that forgets to record the ending — the defect FR5.6 guards."""
+    return None

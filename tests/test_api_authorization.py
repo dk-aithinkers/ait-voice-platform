@@ -497,3 +497,106 @@ class TestAppointmentEndpoints:
 
         assert "Priya" not in body
         assert "cough" not in body
+
+
+class TestHandoffEndpoints:
+    @pytest.fixture
+    def waiting(self, services: Services) -> str:
+        from ait_voice.core.handoff import (
+            HandoffContext,
+            HandoffDecision,
+            HandoffMethod,
+            Urgency,
+        )
+
+        record = services.handoffs.add(
+            services.tenants.resolve(PARKCLINIC),
+            HandoffContext(
+                call_id="call-park-1",
+                tenant_id=PARKCLINIC,
+                reason="clinical_content",
+                urgency=Urgency.CLINICAL,
+                caller_number=PHI("+919990001111"),
+                said=(PHI("I've had chest pain since this morning"),),
+            ),
+            HandoffDecision(method=HandoffMethod.MESSAGE_TAKEN),
+        )
+        return record.handoff_id
+
+    def test_the_queue_carries_no_phi(
+        self, client: TestClient, tokens: dict[str, str], waiting: str
+    ) -> None:
+        """A list left open on a front-desk screen shows nobody's symptoms."""
+        body = client.get("/api/handoffs", headers=_auth(tokens["parkclinic"])).text
+
+        assert "chest pain" not in body
+        assert "+919990001111" not in body
+        assert "clinical" in body
+
+    def test_the_briefing_reveals_what_the_caller_said(
+        self, client: TestClient, tokens: dict[str, str], waiting: str
+    ) -> None:
+        """C-T6 — withholding this is the failure the feature prevents."""
+        body = client.get(
+            f"/api/handoffs/{waiting}", headers=_auth(tokens["parkclinic"])
+        ).json()
+
+        assert body["briefing"]["said"] == ["I've had chest pain since this morning"]
+        assert body["briefing"]["caller_number"] == "+919990001111"
+
+    def test_a_clinic_cannot_read_another_clinics_briefing(
+        self, client: TestClient, tokens: dict[str, str], waiting: str
+    ) -> None:
+        """The most sensitive endpoint in the product."""
+        assert client.get(
+            f"/api/handoffs/{waiting}", headers=_auth(tokens["northside"])
+        ).status_code == 404
+        assert client.get(
+            f"/api/handoffs?tenant={PARKCLINIC}", headers=_auth(tokens["northside"])
+        ).status_code == 403
+
+    def test_a_clinic_cannot_acknowledge_another_clinics_handoff(
+        self, client: TestClient, tokens: dict[str, str], waiting: str
+    ) -> None:
+        assert client.post(
+            f"/api/handoffs/{waiting}/acknowledge", headers=_auth(tokens["northside"])
+        ).status_code == 404
+
+    def test_a_clinic_user_may_acknowledge_its_own(
+        self, client: TestClient, tokens: dict[str, str], waiting: str
+    ) -> None:
+        """The obligation is theirs, so recording that they met it is too."""
+        response = client.post(
+            f"/api/handoffs/{waiting}/acknowledge", headers=_auth(tokens["parkclinic"])
+        )
+
+        assert response.status_code == 200
+        assert response.json()["is_open"] is False
+        assert client.get(
+            "/api/handoffs", headers=_auth(tokens["parkclinic"])
+        ).json() == []
+
+    def test_an_acknowledged_handoff_is_still_readable(
+        self, client: TestClient, tokens: dict[str, str], waiting: str
+    ) -> None:
+        """It is how a clinic learns a handoff went unanswered for two hours."""
+        client.post(
+            f"/api/handoffs/{waiting}/acknowledge", headers=_auth(tokens["parkclinic"])
+        )
+
+        history = client.get(
+            "/api/handoffs?open_only=false", headers=_auth(tokens["parkclinic"])
+        ).json()
+
+        assert len(history) == 1
+        assert history[0]["acknowledged_at"]
+
+    def test_an_unknown_handoff_is_a_404(
+        self, client: TestClient, tokens: dict[str, str]
+    ) -> None:
+        assert client.get(
+            "/api/handoffs/ghost", headers=_auth(tokens["parkclinic"])
+        ).status_code == 404
+        assert client.post(
+            "/api/handoffs/ghost/acknowledge", headers=_auth(tokens["parkclinic"])
+        ).status_code == 404

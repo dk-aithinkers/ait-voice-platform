@@ -56,6 +56,17 @@ export function appointmentStatus(status: string): string {
   return APPOINTMENT_LABELS[status] ?? status;
 }
 
+const URGENCY_LABELS: Record<string, string> = {
+  routine: "Routine",
+  soon: "Soon",
+  urgent: "Urgent",
+  clinical: "Clinical — see first",
+};
+
+export function urgencyLabel(urgency: string): string {
+  return URGENCY_LABELS[urgency] ?? urgency;
+}
+
 const OUTCOME_LABELS: Record<string, string> = {
   appointment_booked: "Appointment booked",
   appointment_rescheduled: "Appointment moved",

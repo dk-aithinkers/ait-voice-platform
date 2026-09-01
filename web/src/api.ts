@@ -5,6 +5,8 @@ import type {
   CallSummary,
   CallbackMessage,
   Clinic,
+  HandoffBriefing,
+  HandoffSummary,
   Principal,
 } from "./types";
 
@@ -87,6 +89,17 @@ export const api = {
     request<ActivitySummary>(scoped(`/summary?days=${days}`, tenant)),
   appointments: (tenant?: string | null, limit = 50) =>
     request<Appointment[]>(scoped(`/appointments?limit=${limit}`, tenant)),
+  handoffs: (tenant?: string | null, openOnly = true) =>
+    request<HandoffSummary[]>(scoped(`/handoffs?open_only=${openOnly}`, tenant)),
+  handoff: (handoffId: string, tenant?: string | null) =>
+    request<HandoffBriefing>(
+      scoped(`/handoffs/${encodeURIComponent(handoffId)}`, tenant),
+    ),
+  acknowledgeHandoff: (handoffId: string, tenant?: string | null) =>
+    request<HandoffSummary>(
+      scoped(`/handoffs/${encodeURIComponent(handoffId)}/acknowledge`, tenant),
+      { method: "POST" },
+    ),
   messages: (tenant?: string | null, openOnly = false) =>
     request<CallbackMessage[]>(
       scoped(`/messages?open_only=${openOnly}`, tenant),

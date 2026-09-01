@@ -15,7 +15,17 @@ from __future__ import annotations
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from enum import StrEnum
 
+from ait_voice.core.handoff import (
+    HandoffContext,
+    HandoffDecision,
+    HandoffMethod,
+    UnresolvedCall,
+    decide_handoff,
+    spoken_promise,
+    urgency_for,
+)
 from ait_voice.core.logging import CallLogger
 from ait_voice.core.tenancy import TenantConfig
 from ait_voice.core.types import PHI, TenantContext, TurnTiming, Utterance
@@ -46,9 +56,35 @@ first.
 Keep replies short. This is a phone call, not a chat window."""
 
 
+class CallEnding(StrEnum):
+    """How a call finished.
+
+    Recorded because FR5.6 is about the *system* ending a call, not about the
+    caller ending one. A caller who hangs up mid-sentence has not been failed;
+    an agent that stops talking and drops them has. Without this distinction
+    the invariant either never fires or fires constantly, and neither is a
+    check worth having.
+    """
+
+    #: The caller stopped speaking or hung up. Their choice, not a failure.
+    CALLER_ENDED = "caller_ended"
+    #: Handed to a person, or a message taken.
+    ESCALATED = "escalated"
+    #: What the caller rang for was done.
+    TASK_COMPLETED = "task_completed"
+
+
 class EscalationReason(str):
     """Why a call left the agent. Values are opaque and safe to log."""
 
+
+#: What the agent says when it did not catch something. One attempt only.
+RECOVERY_PROMPT = "Sorry, I didn't catch that. Could you say it once more?"
+
+#: Substrings that mark the model as not having understood. Crude, and the
+#: same deliberate simplification as _escalation_reason: a real implementation
+#: classifies the caller's utterance rather than reading the agent's reply.
+NOT_UNDERSTOOD_MARKERS = ("didn't catch", "did not catch", "didn't understand")
 
 ESCALATE_CALLER_REQUEST = EscalationReason("caller_requested_human")
 ESCALATE_CLINICAL = EscalationReason("clinical_content")
@@ -70,6 +106,20 @@ class CallResult:
     #: Where the escalation went — a transfer number, or the out-of-hours
     #: policy that applied because nobody was available. Opaque; safe to log.
     escalation_route: str | None = None
+    #: How the call actually left the agent, once it escalated. None while the
+    #: agent still holds the call.
+    handoff_method: str | None = None
+    #: The briefing handed to whoever picks the call up. Carries PHI, so it is
+    #: excluded from anything that logs a CallResult.
+    handoff: HandoffContext | None = field(default=None, repr=False)
+    #: True once the caller's task was completed, a transfer happened, or a
+    #: message was taken. FR5.6 forbids ending a call with none of the three.
+    resolved: bool = False
+    #: One recovery attempt was made before escalating — FR5.1.
+    recovery_attempted: bool = False
+    #: How the call finished. None means the loop exited a way this pipeline
+    #: does not account for, which FR5.6 treats as a defect.
+    ending: CallEnding | None = None
     providers: dict[str, str] = field(default_factory=dict)
     #: False when the transport hands text to a vendor that synthesises
     #: downstream, so the reply-latency column stops short of the audio the
@@ -178,32 +228,53 @@ class VoicePipeline:
                     met_target=result.timings[-1].meets_target,
                 )
 
-                if reason := self._escalation_reason(reply):
-                    result.escalated = True
-                    result.escalation_reason = str(reason)
-                    result.escalation_route = self._route()
-                    log.info(
-                        "escalating",
-                        reason=result.escalation_reason,
-                        route=result.escalation_route,
-                    )
+                # FR5.1 — one recovery attempt when the agent did not
+                # understand, then escalate. A second attempt is where a caller
+                # decides the thing is broken; escalating on the second failure
+                # is the point of allowing a first.
+                if self._not_understood(reply):
+                    if not result.recovery_attempted:
+                        result.recovery_attempted = True
+                        log.info("recovery attempt")
+                    else:
+                        await self._escalate(
+                            tenant, session, result, ESCALATE_NOT_UNDERSTOOD,
+                            history, log,
+                        )
+                        break
+
+                # FR5.2 — a request for a person or clinical content escalates
+                # immediately, with no recovery attempt.
+                elif reason := self._escalation_reason(reply):
+                    await self._escalate(tenant, session, result, reason, history, log)
                     break
 
                 if result.turns >= max_turns:
                     log.info("turn limit reached", limit=max_turns)
+                    # Reaching the limit still owes the caller a resolution.
+                    await self._escalate(
+                        tenant, session, result, ESCALATE_NOT_UNDERSTOOD, history, log
+                    )
                     break
 
                 listening_since = time.perf_counter()
+            else:
+                # The caller's stream ended on its own: they stopped speaking
+                # or hung up. Not a failure, and not something the agent can
+                # resolve on their behalf.
+                if result.ending is None:
+                    result.ending = CallEnding.CALLER_ENDED
+                    result.resolved = True
 
         except Exception as exc:
             # FR5.5 — a dependency failure mid-call routes to escalation with a
             # spoken apology. Dead air is the failure mode that matters on a
             # live call, so the caller is told something before the handoff.
-            result.escalated = True
-            result.escalation_reason = str(ESCALATE_DEPENDENCY)
-            result.escalation_route = self._route()
             log.error("dependency failure", error_type=type(exc).__name__)
             try:
+                # The apology comes first and the briefing is assembled after,
+                # because AC5.5.1 budgets three seconds from failure to spoken
+                # apology and the caller is listening to silence until then.
                 await session.speak(
                     Utterance(
                         text=PHI("I'm sorry — I'm having trouble. Let me get you to someone.")
@@ -211,16 +282,100 @@ class VoicePipeline:
                 )
             except Exception:  # noqa: BLE001 - the apology is best-effort
                 log.error("could not speak apology")
+            try:
+                await self._escalate(
+                    tenant, session, result, ESCALATE_DEPENDENCY, history, log,
+                    speak_promise=False,
+                )
+            except Exception:  # noqa: BLE001 - never mask the original failure
+                log.error("could not complete handoff after dependency failure")
+                result.escalated = True
+                result.escalation_reason = str(ESCALATE_DEPENDENCY)
         finally:
             await session.close()
+
+        if result.ending is None:
+            # FR5.6 — the agent must never end a call without the caller's task
+            # done, a transfer, or a message. Reaching here means the loop
+            # exited a way this method does not account for, which is a defect
+            # rather than a caller hanging up. Failing loudly beats a caller
+            # dropped with nothing recorded.
+            raise UnresolvedCall(
+                f"call {result.call_id!r} ended after {result.turns} turn(s) with "
+                "no completed task, transfer, or message (FR5.6)"
+            )
 
         log.info(
             "call ended",
             turns=result.turns,
             escalated=result.escalated,
+            ending=str(result.ending) if result.ending else None,
+            handoff=result.handoff_method,
             p95_ms=round(result.p95_ms, 1) if result.p95_ms else None,
         )
         return result
+
+    async def _escalate(
+        self,
+        tenant: TenantContext,
+        session,  # noqa: ANN001 - DialogSession protocol
+        result: CallResult,
+        reason: EscalationReason,
+        history: list[Utterance],
+        log: CallLogger,
+        *,
+        speak_promise: bool = True,
+    ) -> None:
+        """Hand the call to a person, carrying what the caller said — C-T6.
+
+        Every exit from the dialog goes through here, so there is one place
+        that decides where a call goes and one place that records it. A second
+        path would be a second chance to end a call with nothing recorded.
+        """
+        result.escalated = True
+        result.escalation_reason = str(reason)
+
+        decision = (
+            decide_handoff(self._config)
+            if self._config
+            # With no tenant config the skeleton has no staffed hours to read,
+            # so it cannot claim a person is available.
+            else HandoffDecision(method=HandoffMethod.MESSAGE_TAKEN)
+        )
+        result.handoff_method = str(decision.method)
+        result.escalation_route = decision.transfer_to or (
+            str(decision.policy) if decision.policy else None
+        )
+        result.handoff = HandoffContext(
+            call_id=result.call_id,
+            tenant_id=tenant.tenant_id,
+            reason=str(reason),
+            urgency=urgency_for(str(reason)),
+            # Only the caller's turns. The agent's own replies are not context
+            # a person needs, and including them doubles what they must read.
+            said=tuple(u.text for u in history[::2]),
+            turns=result.turns,
+            recovery_attempted=result.recovery_attempted,
+        )
+
+        if speak_promise:
+            await session.speak(Utterance(text=PHI(spoken_promise(decision))))
+
+        # FR5.6 — the call now has a transfer or a message behind it.
+        result.resolved = True
+        result.ending = CallEnding.ESCALATED
+        log.info(
+            "escalating",
+            reason=result.escalation_reason,
+            method=result.handoff_method,
+            urgency=str(result.handoff.urgency),
+        )
+
+    @staticmethod
+    def _not_understood(reply: Utterance) -> bool:
+        return any(
+            marker in reply.text.reveal().lower() for marker in NOT_UNDERSTOOD_MARKERS
+        )
 
     def _opening(self) -> str:
         """Disclosure first, then the tenant's greeting.
@@ -234,13 +389,6 @@ class VoicePipeline:
         if self._config:
             return f"{disclosure} {self._config.greeting}"
         return disclosure
-
-    def _route(self) -> str | None:
-        """Where an escalation goes, given who is available right now."""
-        if not self._config:
-            return None
-        route = self._config.escalation_route()
-        return route if isinstance(route, str) else str(route)
 
     @staticmethod
     def _escalation_reason(reply: Utterance) -> EscalationReason | None:

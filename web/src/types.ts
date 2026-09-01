@@ -78,6 +78,36 @@ export interface Appointment {
   rescheduled_from: string | null;
 }
 
+export type Urgency = "routine" | "soon" | "urgent" | "clinical";
+
+/** Queue row. Carries no PHI — the briefing is fetched per record. */
+export interface HandoffSummary {
+  handoff_id: string;
+  call_id: string;
+  reason: string;
+  urgency: Urgency;
+  method: string;
+  at: string;
+  is_open: boolean;
+  acknowledged_at: string | null;
+  turns: number;
+}
+
+/** What a person reads before picking the call up. Contains PHI by design. */
+export interface HandoffBriefing extends HandoffSummary {
+  briefing: {
+    call_id: string;
+    reason: string;
+    urgency: Urgency;
+    turns: number;
+    recovery_attempted: boolean;
+    started_at: string;
+    caller_number: string | null;
+    said: string[];
+    appointment_ids: string[];
+  };
+}
+
 export interface CallbackMessage {
   message_id: string;
   call_id: string;

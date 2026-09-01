@@ -12,6 +12,12 @@ from datetime import UTC, datetime, timedelta
 
 from ait_voice.api.app import Services, create_app
 from ait_voice.api.auth import Principal, Role
+from ait_voice.core.handoff import (
+    HandoffContext,
+    HandoffDecision,
+    HandoffMethod,
+    Urgency,
+)
 from ait_voice.core.records import (
     CallOutcome,
     CallRecord,
@@ -142,6 +148,37 @@ def build_demo() -> Services:
             # A weekend or out-of-hours slot simply is not offered. Only this
             # is expected here; anything else is a real fault and should raise.
             continue
+
+    # Two waiting handoffs, so the queue is not empty and the ordering is
+    # visible: the clinical one rang later and must still come first.
+    services.handoffs.add(
+        north,
+        HandoffContext(
+            call_id="call-002",
+            tenant_id="northside",
+            reason="caller_requested_human",
+            urgency=Urgency.ROUTINE,
+            caller_number=PHI("+15551110072"),
+            said=(PHI("I'd rather talk to a person about this."),),
+            turns=1,
+        ),
+        HandoffDecision(method=HandoffMethod.MESSAGE_TAKEN),
+        at=now - timedelta(minutes=120),
+    )
+    services.handoffs.add(
+        north,
+        HandoffContext(
+            call_id="call-004",
+            tenant_id="northside",
+            reason="clinical_content",
+            urgency=Urgency.CLINICAL,
+            caller_number=PHI("+15551110088"),
+            said=(PHI("I've had chest pain since this morning."),),
+            turns=1,
+        ),
+        HandoffDecision(method=HandoffMethod.MESSAGE_TAKEN),
+        at=now - timedelta(minutes=15),
+    )
 
     services.principals.issue(
         Principal(
