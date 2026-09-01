@@ -33,6 +33,7 @@ from ait_voice.api.auth import (
     seed_from_environment,
 )
 from ait_voice.core.handoff import HandoffQueue
+from ait_voice.core.intake import IntakeStore
 from ait_voice.core.records import CallStore
 from ait_voice.core.scheduling import (
     AppointmentNotFound,
@@ -60,6 +61,7 @@ class Services:
         calendar: Calendar | None = None,
         booking_hours: BookingHours | None = None,
         handoffs: HandoffQueue | None = None,
+        intake: IntakeStore | None = None,
     ) -> None:
         self.tenants = tenants or TenantStore()
         self.calls = calls or CallStore()
@@ -70,6 +72,7 @@ class Services:
         # anyone needs it would be guessing at their diary.
         self.booking_hours = booking_hours or BookingHours()
         self.handoffs = handoffs or HandoffQueue()
+        self.intake = intake or IntakeStore()
 
 
 def create_app(
@@ -339,6 +342,45 @@ def create_app(
         if record is None:
             raise HTTPException(status_code=404, detail="no such handoff")
         return record.summary()
+
+    # -- intake ----------------------------------------------------------
+
+    @app.get("/api/intake")
+    def list_intake(
+        tenant: Scope, limit: Annotated[int, Query(ge=1, le=200)] = 50
+    ) -> list[dict[str, Any]]:
+        """Which intakes exist and what they hold — not what they say.
+
+        Every intake value is PHI, so a list shows field names only. Enough for
+        a clinic to see the work was done without a date of birth on a screen
+        at a front desk.
+        """
+        return [record.summary() for record in services.intake.recent(tenant, limit=limit)]
+
+    @app.get("/api/intake/{intake_id}")
+    def get_intake(tenant: Scope, intake_id: str) -> dict[str, Any]:
+        """The captured details, for a person who needs to act on them.
+
+        Every value here was read back to the caller and confirmed aloud
+        (FR3.2), which is what makes it safe to act on.
+        """
+        record = services.intake.get(tenant, intake_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="no such intake")
+        return {**record.summary(), "details": record.for_clinician()}
+
+    @app.post("/api/intake/{intake_id}/erase")
+    def erase_intake(tenant: Scope, principal: Operator, intake_id: str) -> dict[str, Any]:
+        """Erase captured details on request — DPDP, and good practice anyway.
+
+        Operator-only, and irreversible. The call record and the audit entry
+        survive: the clinic still knows the call happened and the security log
+        still holds the fact, because those carry no personal data.
+        """
+        erased = services.intake.erase(tenant, intake_id)
+        if not erased:
+            raise HTTPException(status_code=404, detail="no such intake")
+        return {"intake_id": intake_id, "erased": True}
 
     @app.get("/api/health")
     def health() -> dict[str, str]:

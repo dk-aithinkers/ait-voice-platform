@@ -4,6 +4,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { dayAndTime, duration, escalationLabel, outcomeLabel } from "../format";
 import { ErrorNote, Loading } from "../components/Common";
+import { IntakePanel } from "../components/IntakePanel";
 
 /** Screen 2a — where the clinic decides whether it trusts the agent. */
 export function CallDetail(): ReactNode {
@@ -79,6 +80,8 @@ export function CallDetail(): ReactNode {
             rather than a measurement.
           </p>
         ) : null}
+
+        <IntakePanel callId={callId} tenant={tenant} />
 
         <h2>Transcript</h2>
         {detail.transcript && detail.transcript.length > 0 ? (

@@ -18,6 +18,7 @@ from ait_voice.core.handoff import (
     HandoffMethod,
     Urgency,
 )
+from ait_voice.core.intake import FieldName, IntakeSession
 from ait_voice.core.records import (
     CallOutcome,
     CallRecord,
@@ -178,6 +179,21 @@ def build_demo() -> Services:
         ),
         HandoffDecision(method=HandoffMethod.MESSAGE_TAKEN),
         at=now - timedelta(minutes=15),
+    )
+
+    # One completed intake, driven through the real session so the demo
+    # exercises the confirmation cycle rather than inserting past it.
+    session = IntakeSession()
+    for field_name, answer in (
+        (FieldName.FULL_NAME, "Alex Reyes"),
+        (FieldName.DATE_OF_BIRTH, "1978-07-19"),
+        (FieldName.CALLBACK_NUMBER, "+15551110041"),
+        (FieldName.REASON_FOR_VISIT, "follow-up on a knee injury"),
+    ):
+        if session.capture(field_name, answer):
+            session.confirm(field_name)
+    services.intake.add(
+        north, session.completed(call_id="call-001", tenant_id="northside")
     )
 
     services.principals.issue(

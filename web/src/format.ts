@@ -56,6 +56,18 @@ export function appointmentStatus(status: string): string {
   return APPOINTMENT_LABELS[status] ?? status;
 }
 
+const INTAKE_LABELS: Record<string, string> = {
+  full_name: "Name",
+  date_of_birth: "Date of birth",
+  callback_number: "Callback number",
+  reason_for_visit: "Reason for visit",
+  notes: "Notes",
+};
+
+export function intakeLabel(field: string): string {
+  return INTAKE_LABELS[field] ?? field;
+}
+
 const URGENCY_LABELS: Record<string, string> = {
   routine: "Routine",
   soon: "Soon",

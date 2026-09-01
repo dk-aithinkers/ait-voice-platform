@@ -600,3 +600,96 @@ class TestHandoffEndpoints:
         assert client.post(
             "/api/handoffs/ghost/acknowledge", headers=_auth(tokens["parkclinic"])
         ).status_code == 404
+
+
+class TestIntakeEndpoints:
+    @pytest.fixture
+    def captured(self, services: Services) -> str:
+        from ait_voice.core.intake import FieldName, IntakeSession
+
+        session = IntakeSession()
+        for name, answer in (
+            (FieldName.FULL_NAME, "Priya Sharma"),
+            (FieldName.DATE_OF_BIRTH, "1985-03-04"),
+            (FieldName.CALLBACK_NUMBER, "+919990001111"),
+            (FieldName.REASON_FOR_VISIT, "knee follow-up"),
+        ):
+            if session.capture(name, answer):
+                session.confirm(name)
+        record = session.completed(call_id="call-park-1", tenant_id=PARKCLINIC)
+        services.intake.add(services.tenants.resolve(PARKCLINIC), record)
+        return record.intake_id
+
+    def test_the_list_shows_field_names_not_values(
+        self, client: TestClient, tokens: dict[str, str], captured: str
+    ) -> None:
+        """A front-desk screen should not display a date of birth."""
+        body = client.get("/api/intake", headers=_auth(tokens["parkclinic"])).text
+
+        assert "Priya" not in body
+        assert "1985" not in body
+        assert "date_of_birth" in body
+
+    def test_the_detail_reveals_the_confirmed_values(
+        self, client: TestClient, tokens: dict[str, str], captured: str
+    ) -> None:
+        body = client.get(
+            f"/api/intake/{captured}", headers=_auth(tokens["parkclinic"])
+        ).json()
+
+        assert body["details"]["full_name"] == "Priya Sharma"
+        assert body["details"]["date_of_birth"] == "1985-03-04"
+
+    def test_a_clinic_cannot_read_another_clinics_intake(
+        self, client: TestClient, tokens: dict[str, str], captured: str
+    ) -> None:
+        assert client.get(
+            f"/api/intake/{captured}", headers=_auth(tokens["northside"])
+        ).status_code == 404
+        assert client.get(
+            f"/api/intake?tenant={PARKCLINIC}", headers=_auth(tokens["northside"])
+        ).status_code == 403
+
+    def test_a_clinic_user_cannot_erase(
+        self, client: TestClient, tokens: dict[str, str], captured: str
+    ) -> None:
+        """Irreversible, so it needs the role that carries the responsibility."""
+        assert client.post(
+            f"/api/intake/{captured}/erase", headers=_auth(tokens["parkclinic"])
+        ).status_code == 403
+
+    def test_an_operator_can_erase(
+        self, client: TestClient, tokens: dict[str, str], captured: str
+    ) -> None:
+        response = client.post(
+            f"/api/intake/{captured}/erase?tenant={PARKCLINIC}",
+            headers=_auth(tokens["operator"]),
+        )
+
+        assert response.status_code == 200
+        assert client.get(
+            f"/api/intake/{captured}?tenant={PARKCLINIC}",
+            headers=_auth(tokens["operator"]),
+        ).status_code == 404
+
+    def test_erasing_leaves_the_call_record(
+        self, client: TestClient, tokens: dict[str, str], captured: str
+    ) -> None:
+        """Erasure removes the personal data, not the fact that a call happened."""
+        client.post(
+            f"/api/intake/{captured}/erase?tenant={PARKCLINIC}",
+            headers=_auth(tokens["operator"]),
+        )
+
+        calls = client.get(
+            f"/api/calls?tenant={PARKCLINIC}", headers=_auth(tokens["operator"])
+        ).json()
+        assert [c["call_id"] for c in calls] == ["call-park-1"]
+
+    def test_erasing_an_unknown_intake_is_a_404(
+        self, client: TestClient, tokens: dict[str, str]
+    ) -> None:
+        assert client.post(
+            f"/api/intake/ghost/erase?tenant={PARKCLINIC}",
+            headers=_auth(tokens["operator"]),
+        ).status_code == 404

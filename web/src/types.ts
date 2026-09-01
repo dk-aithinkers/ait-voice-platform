@@ -78,6 +78,19 @@ export interface Appointment {
   rescheduled_from: string | null;
 }
 
+/** Queue row. Carries no intake values — every one of them is PHI. */
+export interface IntakeSummary {
+  intake_id: string;
+  call_id: string;
+  captured_at: string;
+  fields: string[];
+}
+
+/** The captured details. Every value was confirmed aloud by the caller. */
+export interface IntakeDetail extends IntakeSummary {
+  details: Record<string, string>;
+}
+
 export type Urgency = "routine" | "soon" | "urgent" | "clinical";
 
 /** Queue row. Carries no PHI — the briefing is fetched per record. */

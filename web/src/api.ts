@@ -7,6 +7,8 @@ import type {
   Clinic,
   HandoffBriefing,
   HandoffSummary,
+  IntakeDetail,
+  IntakeSummary,
   Principal,
 } from "./types";
 
@@ -89,6 +91,10 @@ export const api = {
     request<ActivitySummary>(scoped(`/summary?days=${days}`, tenant)),
   appointments: (tenant?: string | null, limit = 50) =>
     request<Appointment[]>(scoped(`/appointments?limit=${limit}`, tenant)),
+  intakes: (tenant?: string | null) =>
+    request<IntakeSummary[]>(scoped("/intake", tenant)),
+  intake: (intakeId: string, tenant?: string | null) =>
+    request<IntakeDetail>(scoped(`/intake/${encodeURIComponent(intakeId)}`, tenant)),
   handoffs: (tenant?: string | null, openOnly = true) =>
     request<HandoffSummary[]>(scoped(`/handoffs?open_only=${openOnly}`, tenant)),
   handoff: (handoffId: string, tenant?: string | null) =>
