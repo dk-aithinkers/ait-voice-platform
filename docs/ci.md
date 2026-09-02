@@ -116,6 +116,41 @@ it is an unsatisfiable one. The status checks are the review.
 gh api repos/dk-aithinkers/ait-voice-platform/branches/main/protection
 ```
 
+## Committing the AI-DLC workspace tree
+
+`CLAUDE.md` says to commit the `aidlc/` tree, and the hook appends to the audit
+shard continuously — so it is dirty most of the time. Protection applies to it
+like anything else, which means a file the hook wrote by itself now needs a
+branch, a pull request and four CI jobs.
+
+Done per session that is enough friction that the tree stops being committed,
+and an audit trail living on one laptop is not an audit trail. So batch it:
+
+```bash
+uv run python scripts/commit_workspace.py --dry-run   # what would go
+uv run python scripts/commit_workspace.py             # branch, PR, wait, squash-merge
+uv run python scripts/commit_workspace.py --no-merge  # stop at the PR
+```
+
+It refuses to run if **anything outside `aidlc/`** is dirty. That guard is the
+whole reason the script is allowed to merge without a human: without it, a tool
+that auto-merges once CI is green is a way for source changes to reach `main`
+inside a commit labelled "workspace state" — the unreviewed merge the rule
+exists to prevent. `tests/test_workspace_batch.py` tests the guard for the same
+reason the gates have their own tests.
+
+The deliberate trade-off: the audit trail lags real time by however long you go
+between runs. That is the cost of batching, and it is cheaper than the trail not
+existing. Nothing stops you running it more often.
+
+### Why not `paths-ignore`
+
+Skipping CI for `aidlc/**` would remove the friction entirely, and was
+considered. It also means a path committed more often than any other stops being
+checked at all — and since `aidlc/` sits in the same repository as the source, a
+rule keyed on paths is one mistaken glob away from being a hole in the gate.
+`team.md` is pointed about controls that only look like controls.
+
 ## Local first pass
 
 ```bash
