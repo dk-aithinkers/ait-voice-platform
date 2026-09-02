@@ -1,0 +1,5 @@
+# CDK only. Deliberately not in pyproject.toml: the application does not import
+# any of this, and a runtime image that shipped an IaC toolkit would be carrying
+# deploy-time credentials-shaped machinery into a container that holds PHI.
+aws-cdk-lib>=2.170.0
+constructs>=10.0.0

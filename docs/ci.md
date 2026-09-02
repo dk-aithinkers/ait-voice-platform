@@ -20,6 +20,8 @@ This document is what that means in practice.
 | **compliance** | `scripts/check_baa.py` | C-R1: the register is well formed |
 | **security** | `gitleaks` | a key committed by accident — irreversible once pushed |
 | | `pip-audit` | a vulnerable Python dependency |
+| **infra** | `cfn-lint` | a template that will not deploy |
+| | `scripts/check_infra.py` | Object Lock, retention, encryption — see `docs/deploying.md` |
 | **web** | `npm audit` | the frontend holds PHI on screen |
 | | `eslint`, `vitest`, `tsc && vite build` | the React surface |
 
@@ -94,6 +96,7 @@ registers as the check run — so the required contexts are:
 Python — lint, types, tests, coverage
 Compliance — BAA register
 Security — secrets and dependencies
+Infra — synthesise and check compliance
 Web — lint, types, tests, build
 ```
 

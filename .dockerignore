@@ -1,0 +1,14 @@
+# Everything by default; add back only what the build needs. An allowlist,
+# because the failure mode of a denylist is a credential or a 232MB virtualenv
+# reaching a layer nobody inspects.
+*
+
+!pyproject.toml
+!uv.lock
+!src/
+!db/migrations/
+!compliance/baa-register.toml
+
+# Even inside what is allowed.
+**/__pycache__/
+**/*.pyc
