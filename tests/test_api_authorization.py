@@ -627,11 +627,19 @@ class TestIntakeEndpoints:
     def test_the_list_shows_field_names_not_values(
         self, client: TestClient, tokens: dict[str, str], captured: str
     ) -> None:
-        """A front-desk screen should not display a date of birth."""
+        """A front-desk screen should not display a date of birth.
+
+        Whole values, not fragments. `"1985"` would be a fragment, and the list
+        carries `intake_id` — a uuid, which contains that substring about once
+        every 4,700 runs. See the same fix in `tests/test_intake.py`.
+        """
         body = client.get("/api/intake", headers=_auth(tokens["parkclinic"])).text
 
-        assert "Priya" not in body
-        assert "1985" not in body
+        assert "Priya Sharma" not in body
+        assert "1985-03-04" not in body
+        assert "+919990001111" not in body
+        assert "knee follow-up" not in body
+        # Field names are what the list view is for.
         assert "date_of_birth" in body
 
     def test_the_detail_reveals_the_confirmed_values(
