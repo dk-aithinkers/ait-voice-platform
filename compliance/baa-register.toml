@@ -41,6 +41,18 @@ baa = false
 how = "Self-serve in dashboard, no premium — the least friction of any vendor found"
 agreement = ""
 
+# Infrastructure that stores or processes PHI. Not selected by `config.py` like
+# the vendors above — which is exactly why it was missing from this register
+# until someone checked. RDS holds transcripts and intake, CloudWatch holds
+# whatever the logging facade emits, S3 holds the content store. Under C-R1 that
+# makes AWS a business associate as surely as the speech vendors are, and a BAA
+# does not flow down from anywhere else.
+
+[vendor.aws]
+baa = false
+how = "Self-serve: accept the AWS BAA in Artifact, then run PHI only on HIPAA-eligible services"
+agreement = ""          # path or URL to the executed agreement
+
 # India-market vendors. `docs/vendors.md` records that these have no HIPAA
 # posture as a category, so they must never appear with `baa = true`.
 
