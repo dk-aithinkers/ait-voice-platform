@@ -19,7 +19,6 @@ from ait_voice.core.pipeline import CallResult
 from ait_voice.core.records import (
     CallOutcome,
     CallRecord,
-    CallStore,
     Message,
     Speaker,
     Transcript,
@@ -27,6 +26,7 @@ from ait_voice.core.records import (
 )
 from ait_voice.core.scheduling import Appointment, AppointmentStatus
 from ait_voice.core.types import PHI, TenantContext, Utterance
+from ait_voice.db.base import CallRepository
 
 #: What a booking action means for the call's recorded outcome.
 _BOOKING_OUTCOMES = {
@@ -73,10 +73,10 @@ def transcript_from(call_id: str, history: list[Utterance]) -> Transcript:
     return Transcript(call_id=call_id, turns=turns)
 
 
-def record_call(
+async def record_call(
     tenant: TenantContext,
     result: CallResult,
-    store: CallStore,
+    store: CallRepository,
     *,
     history: list[Utterance] | None = None,
     caller_number: str | None = None,
@@ -108,10 +108,10 @@ def record_call(
         p95_ms=result.p95_ms,
         latency_observable=result.latency_observable,
     )
-    store.add(tenant, record)
+    await store.add(tenant, record)
 
     if history:
-        store.attach_transcript(tenant, transcript_from(result.call_id, history))
+        await store.attach_transcript(tenant, transcript_from(result.call_id, history))
 
     if audit and appointment is not None:
         # The booking is its own auditable fact, separate from the call ending.
@@ -139,13 +139,13 @@ def record_call(
             escalated=result.escalated,
             duration_seconds=round(duration_seconds, 1),
         )
-    return store.get(tenant, result.call_id) or record
+    return await store.get(tenant, result.call_id) or record
 
 
-def take_message(
+async def take_message(
     tenant: TenantContext,
     call_id: str,
-    store: CallStore,
+    store: CallRepository,
     *,
     note: str,
     caller_number: str | None = None,
@@ -166,7 +166,7 @@ def take_message(
         caller=PHI(caller_number) if caller_number else None,
         note=PHI(note),
     )
-    store.add_message(tenant, message)
+    await store.add_message(tenant, message)
     if audit:
         audit.record(
             tenant,

@@ -13,25 +13,39 @@ from datetime import UTC, datetime, timedelta
 from fastapi import FastAPI
 
 from ait_voice.api.app import Services, create_app
-from ait_voice.api.auth import Principal, Role
+from ait_voice.api.auth import Principal, PrincipalStore, Role
 from ait_voice.core.handoff import (
     HandoffContext,
     HandoffDecision,
     HandoffMethod,
+    HandoffQueue,
     Urgency,
 )
-from ait_voice.core.intake import FieldName, IntakeSession
+from ait_voice.core.intake import FieldName, IntakeSession, IntakeStore
 from ait_voice.core.records import (
     CallOutcome,
     CallRecord,
+    CallStore,
     Message,
     Speaker,
     Transcript,
     TranscriptTurn,
 )
-from ait_voice.core.scheduling import BookingHours, SlotUnavailable
-from ait_voice.core.tenancy import OutOfHoursPolicy, StaffedHours, TenantConfig
+from ait_voice.core.scheduling import BookingHours, Calendar, SlotUnavailable
+from ait_voice.core.tenancy import (
+    OutOfHoursPolicy,
+    StaffedHours,
+    TenantConfig,
+    TenantStore,
+)
 from ait_voice.core.types import PHI, Region
+from ait_voice.db.memory import (
+    InMemoryCalendar,
+    InMemoryCallStore,
+    InMemoryHandoffQueue,
+    InMemoryIntakeStore,
+    InMemoryTenantStore,
+)
 
 DEMO_TRANSCRIPT = (
     (
@@ -47,8 +61,22 @@ DEMO_TRANSCRIPT = (
 
 
 def build_demo() -> Services:
-    services = Services()
-    services.tenants.add(
+    """Seed the synchronous stores, then wrap them in the async interface.
+
+    Seeding runs against the plain stores rather than through the repository
+    interface because `demo_app()` has to stay synchronous — uvicorn calls a
+    `--factory` before there is a loop to await on. Wrapping afterwards is also
+    the honest shape: this app is in-memory by construction, not by
+    configuration, and `Services.from_database` is what a real deployment uses.
+    """
+    tenants = TenantStore()
+    calls = CallStore()
+    calendar = Calendar()
+    handoffs = HandoffQueue()
+    intake = IntakeStore()
+    principals = PrincipalStore()
+
+    tenants.add(
         TenantConfig(
             tenant_id="northside",
             region=Region.US,
@@ -60,7 +88,7 @@ def build_demo() -> Services:
             timezone="America/New_York",
         )
     )
-    services.tenants.add(
+    tenants.add(
         TenantConfig(
             tenant_id="parkclinic",
             region=Region.INDIA,
@@ -75,7 +103,7 @@ def build_demo() -> Services:
     )
 
     now = datetime.now(UTC)
-    north = services.tenants.resolve("northside")
+    north = tenants.resolve("northside")
     seed = [
         ("call-001", 45, CallOutcome.APPOINTMENT_BOOKED, "+15551110041", 130.0, 4, None),
         ("call-002", 120, CallOutcome.ESCALATED, "+15551110072", 38.0, 1, "caller_requested_human"),
@@ -84,7 +112,7 @@ def build_demo() -> Services:
         ("call-005", 1500, CallOutcome.MESSAGE_TAKEN, "+15551110055", 74.0, 3, None),
     ]
     for call_id, minutes_ago, outcome, number, seconds, turns, reason in seed:
-        services.calls.add(
+        calls.add(
             north,
             CallRecord(
                 call_id=call_id,
@@ -98,14 +126,14 @@ def build_demo() -> Services:
                 p95_ms=860.0,
             ),
         )
-    services.calls.attach_transcript(
+    calls.attach_transcript(
         north,
         Transcript(
             "call-001",
             tuple(TranscriptTurn(speaker, PHI(text)) for speaker, text in DEMO_TRANSCRIPT),
         ),
     )
-    services.calls.add_message(
+    calls.add_message(
         north,
         Message(
             message_id="msg-001",
@@ -117,8 +145,8 @@ def build_demo() -> Services:
         ),
     )
 
-    park = services.tenants.resolve("parkclinic")
-    services.calls.add(
+    park = tenants.resolve("parkclinic")
+    calls.add(
         park,
         CallRecord(
             call_id="call-101",
@@ -144,9 +172,9 @@ def build_demo() -> Services:
             hour=hour, minute=30, second=0, microsecond=0
         )
         try:
-            services.calendar.book(
+            calendar.book(
                 north,
-                services.tenants.get("northside"),
+                tenants.get("northside"),
                 hours,
                 slot,
                 call_id="call-001",
@@ -160,7 +188,7 @@ def build_demo() -> Services:
 
     # Two waiting handoffs, so the queue is not empty and the ordering is
     # visible: the clinical one rang later and must still come first.
-    services.handoffs.add(
+    handoffs.add(
         north,
         HandoffContext(
             call_id="call-002",
@@ -174,7 +202,7 @@ def build_demo() -> Services:
         HandoffDecision(method=HandoffMethod.MESSAGE_TAKEN),
         at=now - timedelta(minutes=120),
     )
-    services.handoffs.add(
+    handoffs.add(
         north,
         HandoffContext(
             call_id="call-004",
@@ -200,9 +228,9 @@ def build_demo() -> Services:
     ):
         if session.capture(field_name, answer):
             session.confirm(field_name)
-    services.intake.add(north, session.completed(call_id="call-001", tenant_id="northside"))
+    intake.add(north, session.completed(call_id="call-001", tenant_id="northside"))
 
-    services.principals.issue(
+    principals.issue(
         Principal(
             principal_id="operator",
             role=Role.OPERATOR,
@@ -210,7 +238,7 @@ def build_demo() -> Services:
         ),
         os.environ.get("AIT_OPERATOR_TOKEN", "demo-operator-token"),
     )
-    services.principals.issue(
+    principals.issue(
         Principal(
             principal_id="clinic:northside",
             role=Role.CLINIC,
@@ -219,7 +247,14 @@ def build_demo() -> Services:
         ),
         os.environ.get("AIT_CLINIC_TOKEN", "demo-clinic-token"),
     )
-    return services
+    return Services(
+        tenants=InMemoryTenantStore(tenants),
+        calls=InMemoryCallStore(calls),
+        calendar=InMemoryCalendar(calendar),
+        handoffs=InMemoryHandoffQueue(handoffs),
+        intake=InMemoryIntakeStore(intake),
+        principals=principals,
+    )
 
 
 def demo_app() -> FastAPI:

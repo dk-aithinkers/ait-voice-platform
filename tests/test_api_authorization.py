@@ -29,6 +29,7 @@ from ait_voice.api.auth import (
 from ait_voice.core.records import CallOutcome, CallRecord, CallStore, Message
 from ait_voice.core.tenancy import TenantConfig, TenantStore
 from ait_voice.core.types import PHI, Region
+from ait_voice.db.memory import InMemoryCallStore, InMemoryTenantStore
 
 NORTHSIDE = "northside"
 PARKCLINIC = "parkclinic"
@@ -76,7 +77,13 @@ def services() -> Services:
             note=PHI("Wants to reschedule Thursday"),
         ),
     )
-    return Services(tenants=tenants, calls=calls, principals=PrincipalStore())
+    # Seeded synchronously, then wrapped — the same shape `api/demo.py` uses,
+    # and the reason `Services` takes the protocol rather than a concrete store.
+    return Services(
+        tenants=InMemoryTenantStore(tenants),
+        calls=InMemoryCallStore(calls),
+        principals=PrincipalStore(),
+    )
 
 
 @pytest.fixture
@@ -272,19 +279,22 @@ class TestTokenHandling:
 
 
 class TestResolveScope:
-    def test_an_inactive_tenant_is_refused(self) -> None:
-        tenants = TenantStore()
-        tenants.add(TenantConfig(tenant_id="t", region=Region.US, clinic_name="T"))
-        tenants.deactivate("t")
+    async def test_an_inactive_tenant_is_refused(self) -> None:
+        inner = TenantStore()
+        inner.add(TenantConfig(tenant_id="t", region=Region.US, clinic_name="T"))
+        inner.deactivate("t")
+        tenants = InMemoryTenantStore(inner)
 
         with pytest.raises(ForbiddenError, match="unknown or inactive"):
-            resolve_scope(
+            await resolve_scope(
                 Principal(principal_id="c", role=Role.CLINIC, tenant_id="t"), None, tenants
             )
 
-    def test_an_unknown_tenant_is_refused(self) -> None:
+    async def test_an_unknown_tenant_is_refused(self) -> None:
         with pytest.raises(ForbiddenError, match="unknown or inactive"):
-            resolve_scope(Principal(principal_id="op", role=Role.OPERATOR), "ghost", TenantStore())
+            await resolve_scope(
+                Principal(principal_id="op", role=Role.OPERATOR), "ghost", InMemoryTenantStore()
+            )
 
 
 class TestPHIExposure:
@@ -368,16 +378,15 @@ class TestDemoSeed:
 
 class TestAppointmentEndpoints:
     @pytest.fixture
-    def booked(self, services: Services) -> str:
+    async def booked(self, services: Services) -> str:
         from ait_voice.core.scheduling import BookingHours
 
-        config = services.tenants.get(PARKCLINIC)
+        park = await services.tenants.resolve(PARKCLINIC)
+        config = await services.tenants.get(PARKCLINIC)
         hours = BookingHours()
-        slot = services.calendar.availability(
-            services.tenants.resolve(PARKCLINIC), config, hours, limit=1
-        )[0]
-        appointment = services.calendar.book(
-            services.tenants.resolve(PARKCLINIC),
+        slot = (await services.calendar.availability(park, config, hours, limit=1))[0]
+        appointment = await services.calendar.book(
+            park,
             config,
             hours,
             slot,
@@ -467,18 +476,17 @@ class TestAppointmentEndpoints:
         assert appointment["local_start"] != appointment["starts_at"]
         assert "spoken" in appointment
 
-    def test_the_diary_carries_no_patient_name(
+    async def test_the_diary_carries_no_patient_name(
         self, client: TestClient, tokens: dict[str, str], services: Services
     ) -> None:
         from ait_voice.core.scheduling import BookingHours
 
-        config = services.tenants.get(PARKCLINIC)
+        park = await services.tenants.resolve(PARKCLINIC)
+        config = await services.tenants.get(PARKCLINIC)
         hours = BookingHours()
-        slot = services.calendar.availability(
-            services.tenants.resolve(PARKCLINIC), config, hours, limit=1
-        )[0]
-        services.calendar.book(
-            services.tenants.resolve(PARKCLINIC),
+        slot = (await services.calendar.availability(park, config, hours, limit=1))[0]
+        await services.calendar.book(
+            park,
             config,
             hours,
             slot,
@@ -494,7 +502,7 @@ class TestAppointmentEndpoints:
 
 class TestHandoffEndpoints:
     @pytest.fixture
-    def waiting(self, services: Services) -> str:
+    async def waiting(self, services: Services) -> str:
         from ait_voice.core.handoff import (
             HandoffContext,
             HandoffDecision,
@@ -502,8 +510,8 @@ class TestHandoffEndpoints:
             Urgency,
         )
 
-        record = services.handoffs.add(
-            services.tenants.resolve(PARKCLINIC),
+        record = await services.handoffs.add(
+            await services.tenants.resolve(PARKCLINIC),
             HandoffContext(
                 call_id="call-park-1",
                 tenant_id=PARKCLINIC,
@@ -600,7 +608,7 @@ class TestHandoffEndpoints:
 
 class TestIntakeEndpoints:
     @pytest.fixture
-    def captured(self, services: Services) -> str:
+    async def captured(self, services: Services) -> str:
         from ait_voice.core.intake import FieldName, IntakeSession
 
         session = IntakeSession()
@@ -613,7 +621,7 @@ class TestIntakeEndpoints:
             if session.capture(name, answer):
                 session.confirm(name)
         record = session.completed(call_id="call-park-1", tenant_id=PARKCLINIC)
-        services.intake.add(services.tenants.resolve(PARKCLINIC), record)
+        await services.intake.add(await services.tenants.resolve(PARKCLINIC), record)
         return record.intake_id
 
     def test_the_list_shows_field_names_not_values(

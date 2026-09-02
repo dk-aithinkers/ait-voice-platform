@@ -39,6 +39,36 @@ jobs:
     name: Python — lint, types, tests, coverage
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
+    services:
+      # Real Postgres, because row-level security, partial unique indexes and
+      # SET LOCAL are engine-specific — testing them anywhere else would be
+      # testing something we do not ship.
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ait-voice
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      AIT_DB_HOST: localhost
+      AIT_DB_PORT: "5432"
+      AIT_DB_NAME: ait-voice
+      # The application role. Deliberately not the superuser: a superuser
+      # bypasses RLS unconditionally, so testing as one would prove nothing.
+      AIT_DB_USER: ait_app
+      AIT_DB_PASSWORD: local_dev_only
+      AIT_DB_OWNER_USER: postgres
+      AIT_DB_OWNER_PASSWORD: postgres
+
     steps:
       - uses: actions/checkout@v4
 
@@ -49,6 +79,11 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --all-extras --dev
+
+      - name: Migrate
+        # Creates the schema, the ait_app role and the RLS policies. Runs as
+        # the owner; the suite then connects as ait_app.
+        run: uv run ait-voice-migrate
 
       - name: Ruff
         run: uv run ruff check --output-format=github .

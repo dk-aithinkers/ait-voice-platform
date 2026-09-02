@@ -178,7 +178,7 @@ class TestTenantStore:
         store.add(_config("b"))
         store.deactivate("b")
 
-        assert [c.tenant_id for c in store.active_tenants] == ["a"]
+        assert [c.tenant_id for c in store.active_tenants()] == ["a"]
 
 
 class TestTenantConfig:

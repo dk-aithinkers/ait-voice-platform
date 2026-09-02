@@ -15,7 +15,7 @@ This document is what that means in practice.
 | **python** | `ruff check` | the security rule sets (S, T20, G, B, ASYNC) already configured |
 | | `ruff format --check` | a consistent diff, so review sees changes not reflow |
 | | `mypy` (strict on `src`) | the compensating control `team.md` names for having no second reader |
-| | `pytest` | 491 tests |
+| | `pytest` | 715 tests |
 | | `scripts/check_coverage.py` | **per-package** floors — see below |
 | **compliance** | `scripts/check_baa.py` | C-R1: the register is well formed |
 | **security** | `gitleaks` | a key committed by accident — irreversible once pushed |
@@ -65,20 +65,56 @@ executed BAA. **It fails today, and that failure is the control working** — it
 belongs on the production deploy, not on the merge gate. This is D-05, external
 contracting rather than engineering.
 
-## Branch protection — required, and not yet on
+## Branch protection — on
 
-CI reports status; it does not block anything by itself. On GitHub:
-
-**Settings → Branches → Add rule** for `main`:
-- Require status checks to pass: `python`, `compliance`, `security`, `web`
-- Require branches to be up to date before merging
-- **Do not allow bypassing the above settings** ← the important one
-
-`team.md` is explicit that this applies to the repository owner:
+`main` is protected, and the rule applies to the repository owner too.
+`team.md` is explicit about why:
 
 > On this repository the required-check enforcement applies to the repository
 > owner as well: a branch-protection rule the only committer can bypass
 > unrecorded is not a gate, it is a suggestion.
+
+What is set:
+
+| Setting | Value |
+|---|---|
+| Required status checks | the four below, all four required |
+| Require branches to be up to date | yes — a branch that passed against a stale `main` was not tested against what it merges into |
+| Include administrators | **yes** — this is the one that makes it a gate |
+| Required PR approvals | none, deliberately — see below |
+| Force pushes / branch deletion | both refused |
+
+### The required check names are the job `name:`, not the job id
+
+This is worth stating because getting it wrong fails in a confusing direction.
+The workflow gives every job a `name:`, and that display name is what GitHub
+registers as the check run — so the required contexts are:
+
+```
+Python — lint, types, tests, coverage
+Compliance — BAA register
+Security — secrets and dependencies
+Web — lint, types, tests, build
+```
+
+Not `python`, `compliance`, `security`, `web`. Requiring the job ids would name
+four checks that never report, and GitHub blocks a merge that is waiting on a
+check it has not seen — so every merge would hang forever on a rule that looks
+correctly configured. Rename a job in `ci.yml` and this rule must be updated in
+the same change, or the same thing happens.
+
+### No required approvals, deliberately
+
+`team.md` puts the reviewer role on the merge gate precisely because there is
+no second human. GitHub will not let you approve your own pull request, so a
+required-approval rule on a one-person repository is not a stricter control —
+it is an unsatisfiable one. The status checks are the review.
+
+### Reading it back
+
+```bash
+gh api repos/dk-aithinkers/ait-voice-platform/branches/main/protection
+```
 
 ## Local first pass
 

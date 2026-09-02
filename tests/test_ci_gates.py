@@ -13,8 +13,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 REPO = Path(__file__).resolve().parent.parent
 COVERAGE_GATE = REPO / "scripts" / "check_coverage.py"
 BAA_GATE = REPO / "scripts" / "check_baa.py"
@@ -118,12 +116,14 @@ class TestCoverageGate:
                 f"{excluded} is excluded but its replacement test {replacement} is missing"
             )
 
-    def test_it_passes_on_the_real_repository(self) -> None:
-        """The gate has to be satisfiable, or nobody can merge anything."""
-        if not (REPO / "coverage.json").exists():
-            pytest.skip("coverage.json not generated in this run")
-
-        assert run(COVERAGE_GATE, cwd=REPO).returncode == 0
+    # Deliberately no "the gate passes on this repository" test.
+    #
+    # `coverage.json` is written when pytest finishes, so a test reading it
+    # mid-run sees the *previous* run's numbers. That test can fail without a
+    # regression (stale file) and pass while coverage is genuinely broken (stale
+    # file from a good run) — it reports on the wrong thing in both directions.
+    # CI runs the gate as its own step after pytest, which is correctly ordered
+    # and is the check that actually counts.
 
     def test_a_package_with_no_branches_is_not_a_division_by_zero(self) -> None:
         from scripts.check_coverage import percent

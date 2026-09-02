@@ -33,9 +33,13 @@ api = [
     "fastapi>=0.141.1",
     "uvicorn[standard]>=0.52.4",
 ]
+postgres = [
+    "asyncpg>=0.31.0",
+]
 
 [project.scripts]
 ait-voice = "ait_voice.cli:main"
+ait-voice-migrate = "ait_voice.db.migrate:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -82,6 +86,7 @@ ignore = [
 "src/ait_voice/cli.py" = ["T20"]  # the CLI is the one place print() is the point
 # The CI gates are command-line tools whose entire output is their report.
 "scripts/**" = ["T20"]
+"src/ait_voice/db/migrate.py" = ["T20"]  # a CLI; its output is the report
 
 # ---------------------------------------------------------------------------
 # Coverage — per-package BRANCH coverage, not global line coverage.
@@ -95,6 +100,19 @@ ignore = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# A forgotten `await` on a store call yields a coroutine, and a coroutine is
+# truthy — so `assert store.get(...)` would pass while asserting nothing. Since
+# the repositories are async and the stores they replaced were not, that is the
+# single most likely way a test here goes quietly green. Python already notices;
+# this makes it fail the build instead of scrolling past in the warnings summary.
+# Two entries because the warning can arrive by two routes: raised inline if
+# the coroutine is collected during the test, or — more often — at garbage
+# collection, where pytest re-emits it as PytestUnraisableExceptionWarning.
+# Only catching the first would leave the common case scrolling past.
+filterwarnings = [
+    "error:coroutine .* was never awaited:RuntimeWarning",
+    "error::pytest.PytestUnraisableExceptionWarning",
+]
 # So tests can import the CI gates in `scripts/` and check their logic
 # directly rather than only through a subprocess.
 pythonpath = ["."]
