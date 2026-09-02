@@ -73,7 +73,13 @@ def git(*args: str) -> str:
         text=True,
         check=True,
     )
-    return result.stdout.strip()
+    # rstrip the trailing newline only. NEVER .strip(): porcelain status lines
+    # begin with a significant space (" M path" for an unstaged modification),
+    # and stripping it shifts every path left by one, so `aidlc/x` parses as
+    # `idlc/x` and the guard refuses a batch it should have accepted. That was
+    # a real bug here, and it survived because the tests fed hand-written
+    # status strings straight to the parser instead of through this function.
+    return result.stdout.rstrip("\n")
 
 
 def porcelain_paths(status: str) -> list[str]:
@@ -86,7 +92,16 @@ def porcelain_paths(status: str) -> list[str]:
     for line in status.splitlines():
         if not line.strip():
             continue
-        # "XY path" or "XY old -> new" for renames; take the destination.
+        # Porcelain v1 is exactly two status characters, a space, then the
+        # path. Validated rather than assumed: if the caller ever hands this
+        # mangled input — a stripped leading space being the way that actually
+        # happened — a silent mis-parse turns into a confusing refusal about a
+        # path that does not exist. Fail loudly at the parse instead.
+        if len(line) < 4 or line[2] != " ":
+            raise Refused(
+                f"cannot parse a git status line: {line!r}\n"
+                "Expected two status characters, a space, then the path."
+            )
         path = line[3:]
         if " -> " in path:
             path = path.split(" -> ", 1)[1]

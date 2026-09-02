@@ -15,8 +15,16 @@ rule exists to prevent.
 
 from __future__ import annotations
 
+import subprocess
+
 import pytest
-from scripts.commit_workspace import WORKSPACE_PREFIX, Refused, check_only_workspace
+import scripts.commit_workspace as cw
+from scripts.commit_workspace import (
+    WORKSPACE_PREFIX,
+    Refused,
+    check_only_workspace,
+    porcelain_paths,
+)
 
 
 class TestItAcceptsTheWorkspaceTree:
@@ -95,3 +103,53 @@ class TestThePrefixItself:
     def test_it_carries_a_trailing_slash(self) -> None:
         """Without it, `aidlc-anything` would pass the guard."""
         assert WORKSPACE_PREFIX.endswith("/")
+
+
+class TestTheSeamThatActuallyBroke:
+    """`git()` must not strip the leading space off a porcelain line.
+
+    These tests exist because the first version of this file did not have
+    them, and the bug walked straight past ten passing tests into `main`.
+    Every case above hands `check_only_workspace` a hand-written status
+    string, which never exercises the function that reads git — and that
+    function ended with `.strip()`, which eats the significant leading space
+    of " M path". Every path then parsed one character short, so the guard
+    refused batches it should have accepted.
+
+    The lesson is the one this repository keeps relearning: a test that skips
+    the seam proves the seam works.
+    """
+
+    def test_git_preserves_the_leading_status_space(self, monkeypatch) -> None:
+        """The regression itself, pinned at the function that had the bug."""
+        raw = " M aidlc/spaces/default/x.md\n"
+
+        class _Result:
+            stdout = raw
+
+        monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Result())
+
+        assert cw.git("status", "--porcelain") == " M aidlc/spaces/default/x.md"
+
+    def test_the_whole_path_from_git_output_to_verdict(self, monkeypatch) -> None:
+        """End to end over the real seam: git output in, accepted paths out."""
+        raw = " M aidlc/a.md\n?? aidlc/b.md\n"
+
+        class _Result:
+            stdout = raw
+
+        monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Result())
+
+        assert check_only_workspace(cw.git("status", "--porcelain")) == [
+            "aidlc/a.md",
+            "aidlc/b.md",
+        ]
+
+    def test_a_stripped_line_is_refused_loudly_not_misparsed(self) -> None:
+        """Belt and braces: if the space is ever lost again, say so plainly."""
+        with pytest.raises(Refused, match="cannot parse a git status line"):
+            porcelain_paths("M aidlc/x.md")
+
+    def test_an_unstaged_modification_is_the_common_case(self) -> None:
+        """A leading space is not an edge case — it is what the hook produces."""
+        assert porcelain_paths(" M aidlc/x.md") == ["aidlc/x.md"]
