@@ -49,6 +49,12 @@ from ait_voice.db.calls import PostgresCallStore
 from ait_voice.db.connection import Database
 from ait_voice.db.handoffs import PostgresHandoffQueue
 from ait_voice.db.intake import PostgresIntakeStore
+from ait_voice.db.memory import (
+    InMemoryCalendar,
+    InMemoryCallStore,
+    InMemoryHandoffQueue,
+    InMemoryIntakeStore,
+)
 from ait_voice.db.scheduling import PostgresCalendar
 from tests.conftest import postgres_available
 
@@ -86,7 +92,14 @@ async def _call(store: Any, method: str, *args: Any, **kwargs: Any) -> Any:  # n
 # Parameterisation: every test below runs once per implementation.
 # --------------------------------------------------------------------------
 
-IMPLEMENTATIONS = ["memory"]
+#: "memory-async" is the delegation layer in `ait_voice.db.memory`, which is
+#: what the API and the demo app actually hold. It is thin enough to look
+#: obviously correct, which is exactly why it is tested rather than trusted: a
+#: wrapper that forwards to the wrong method, drops a keyword argument or
+#: swallows an exception looks just as obviously correct. Running the same
+#: contract against it costs nothing and turns "memory ≡ memory-async ≡
+#: Postgres" into a result rather than a claim.
+IMPLEMENTATIONS = ["memory", "memory-async"]
 if postgres_available():
     IMPLEMENTATIONS.append("postgres")
 
@@ -133,6 +146,8 @@ async def seeded_tenants(implementation: str, owner: Database | None) -> None:
 async def calls(implementation: str, backend: Database | None, seeded_tenants: None) -> Any:  # noqa: ANN401
     if implementation == "memory":
         return CallStore()
+    if implementation == "memory-async":
+        return InMemoryCallStore()
     assert backend is not None
     return PostgresCallStore(backend)
 
@@ -141,6 +156,8 @@ async def calls(implementation: str, backend: Database | None, seeded_tenants: N
 async def calendar(implementation: str, backend: Database | None, seeded_tenants: None) -> Any:  # noqa: ANN401
     if implementation == "memory":
         return Calendar()
+    if implementation == "memory-async":
+        return InMemoryCalendar()
     assert backend is not None
     return PostgresCalendar(backend)
 
@@ -149,6 +166,8 @@ async def calendar(implementation: str, backend: Database | None, seeded_tenants
 async def handoffs(implementation: str, backend: Database | None, seeded_tenants: None) -> Any:  # noqa: ANN401
     if implementation == "memory":
         return HandoffQueue()
+    if implementation == "memory-async":
+        return InMemoryHandoffQueue()
     assert backend is not None
     return PostgresHandoffQueue(backend)
 
@@ -157,6 +176,8 @@ async def handoffs(implementation: str, backend: Database | None, seeded_tenants
 async def intake(implementation: str, backend: Database | None, seeded_tenants: None) -> Any:  # noqa: ANN401
     if implementation == "memory":
         return IntakeStore()
+    if implementation == "memory-async":
+        return InMemoryIntakeStore()
     assert backend is not None
     return PostgresIntakeStore(backend)
 
@@ -176,6 +197,21 @@ def _record(call_id: str = "c-1", **kw: Any) -> CallRecord:  # noqa: ANN401
 
 
 class TestCallRecords:
+    async def test_counting_is_per_tenant(self, calls: Any) -> None:  # noqa: ANN401
+        """`count` had no contract test on any implementation until now.
+
+        Worth one: it is the only method whose return value a wrapper can get
+        wrong without changing any stored state, so nothing else would notice.
+        """
+        assert await _call(calls, "count", NORTH) == 0
+
+        await _call(calls, "add", NORTH, _record("c-1"))
+        await _call(calls, "add", NORTH, _record("c-2"))
+        await _call(calls, "add", PARK, _record("c-3", tenant_id="parkclinic"))
+
+        assert await _call(calls, "count", NORTH) == 2
+        assert await _call(calls, "count", PARK) == 1
+
     async def test_a_record_round_trips(self, calls: Any) -> None:  # noqa: ANN401
         await _call(calls, "add", NORTH, _record(caller=PHI("+15551110041")))
 
@@ -695,10 +731,13 @@ class TestIntake:
 @pytest.fixture
 async def tenants(implementation: str, backend: Database | None) -> Any:  # noqa: ANN401
     from ait_voice.core.tenancy import TenantStore
+    from ait_voice.db.memory import InMemoryTenantStore
     from ait_voice.db.tenants import PostgresTenantStore
 
     if implementation == "memory":
         return TenantStore()
+    if implementation == "memory-async":
+        return InMemoryTenantStore()
     assert backend is not None
     return PostgresTenantStore(backend)
 
@@ -707,15 +746,44 @@ async def tenants(implementation: str, backend: Database | None) -> Any:  # noqa
 async def consent(implementation: str, backend: Database | None) -> Any:  # noqa: ANN401
     from ait_voice.core.consent import ConsentLedger
     from ait_voice.db.consent import PostgresConsentLedger
+    from ait_voice.db.memory import InMemoryConsentLedger
 
     if implementation == "memory":
         return ConsentLedger()
+    if implementation == "memory-async":
+        return InMemoryConsentLedger()
     assert backend is not None
     return PostgresConsentLedger(backend)
 
 
 class TestTenants:
     """The registry. Deliberately the one table without row-level security."""
+
+    async def test_counting_and_listing_agree(self, tenants: Any, implementation: str) -> None:  # noqa: ANN401
+        """The one place the three implementations use different idioms.
+
+        `count` and `all` have no counterpart on the synchronous store, which
+        says the same thing with `__len__` and `__iter__` — and a dunder has no
+        awaitable form, so the async interface cannot borrow it. That is the
+        seam where `InMemoryTenantStore` does something other than plain
+        delegation, and therefore the one place it could quietly disagree.
+
+        So the assertion is made through each implementation's own idiom rather
+        than skipped for the odd one out. Reaching for the dunders here is
+        deliberate: it checks that the wrapper's translation is faithful, which
+        a skip would leave unexamined.
+        """
+        await _call(tenants, "add", NORTH_CONFIG)
+        await _call(tenants, "add", PARK_CONFIG)
+
+        if implementation == "memory":
+            assert len(tenants) == 2
+            assert sorted(c.tenant_id for c in tenants) == ["northside", "parkclinic"]
+            return
+
+        assert await _call(tenants, "count") == 2
+        listed = await _call(tenants, "all")
+        assert sorted(c.tenant_id for c in listed) == ["northside", "parkclinic"]
 
     async def test_a_tenant_round_trips(self, tenants: Any) -> None:  # noqa: ANN401
         await _call(tenants, "add", NORTH_CONFIG)

@@ -11,6 +11,10 @@ Two processes. The API first:
 uv run uvicorn --factory ait_voice.api.demo:demo_app --port 8000
 ```
 
+That one holds its data in memory and seeds itself, which is the point: no
+database, no setup, synthetic data only. The Postgres-backed entrypoint is
+`ait_voice.api.main:production_app` — see `docs/database.md`.
+
 Then the UI, which proxies `/api` to it so the browser makes no cross-origin
 request and CORS stays off in the common path:
 

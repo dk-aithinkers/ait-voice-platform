@@ -64,6 +64,18 @@ createdb ait-voice
 AIT_DB_OWNER_USER=postgres AIT_DB_OWNER_PASSWORD=<yours> uv run ait-voice-migrate
 ```
 
+Or, matching CI's image exactly and leaving any Postgres you already run
+alone — note the port, since 5432 is often already taken:
+
+```bash
+docker run -d --name ait-voice-postgres \
+  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=ait-voice -p 5435:5432 postgres:17-alpine
+```
+
+Then set `AIT_DB_PORT=5435` in `.env` alongside the other `AIT_DB_*` values
+from `.env.example`, and run `uv run ait-voice-migrate`.
+
 The migration creates the `ait_app` role with a local-only password. Tests skip
 themselves unless `AIT_DB_NAME` is set, so the suite runs either way — but a
 run without Postgres has not tested tenant isolation at the database, which is
@@ -89,11 +101,57 @@ checksum. Editing an applied migration is refused: the schema in front of you
 would no longer be the one the file describes, and that is how two environments
 diverge with nothing to show for it. Add a new file instead.
 
+## Choosing a backend
+
+One async interface, two implementations behind it. The protocols live in
+`db/base.py`; `Services` is typed against them and never against a concrete
+store, so the choice is wiring rather than something the handlers know about.
+
+```python
+Services()  # in-memory — tests and the demo app
+Services.from_database(database)  # Postgres — every real deployment
+```
+
+Handing `Services` a synchronous store is a **type error** under `mypy
+--strict`, not a deployment that quietly loses every call on restart. That is
+the whole reason the protocols exist rather than a union of concrete types.
+
+The production entrypoint is `ait_voice.api.main`, which opens the pool in the
+app's lifespan:
+
+```bash
+uv run uvicorn --factory ait_voice.api.main:production_app
+```
+
+`ait_voice.api.demo` is the in-memory one, and stays that way on purpose — it
+exists to show the UI with no database, and `web/README.md` documents it as the
+zero-setup path.
+
+### Why the in-memory stores are wrapped rather than made async
+
+`db/memory.py` holds six classes that delegate to the synchronous stores and do
+nothing else. Postgres is async and cannot be otherwise; memory can be either,
+so the interface takes the shape the constrained side requires and the
+unconstrained side adapts.
+
+The alternative was making `core/` async throughout, which would have meant
+rewriting the several hundred tests that pin domain behaviour — booking rules,
+consent expiry, redaction — none of which is about persistence. A forgotten
+`await` yields a coroutine, and a coroutine is truthy, so `assert
+store.get(...)` would keep passing while asserting nothing. `pyproject.toml`
+turns that warning into a test failure for the same reason.
+
+The wrapper is thin enough to look obviously correct, which is exactly why it
+is tested rather than trusted: `test_repository_equivalence.py` runs its
+contract against all three, so *memory ≡ memory-async ≡ Postgres* is a result
+and not a claim.
+
 ## Still to do
 
-- Repository implementations replacing the in-memory stores (`TenantStore`,
-  `CallStore`, `Calendar`, `HandoffQueue`, `IntakeStore`, `ConsentLedger`).
 - Encryption at rest and backup policy — RDS gives both, and is HIPAA-eligible
   under the AWS BAA.
 - Infrastructure: VPC, RDS, secrets, and the OIDC federation `team.md`
   specifies for CI.
+- The pipeline still records calls through whatever `CallRepository` it is
+  handed, which is correct — but nothing yet constructs a live call against the
+  Postgres one, because no deployment exists to run it.

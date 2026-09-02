@@ -15,7 +15,7 @@ This document is what that means in practice.
 | **python** | `ruff check` | the security rule sets (S, T20, G, B, ASYNC) already configured |
 | | `ruff format --check` | a consistent diff, so review sees changes not reflow |
 | | `mypy` (strict on `src`) | the compensating control `team.md` names for having no second reader |
-| | `pytest` | 491 tests |
+| | `pytest` | 715 tests |
 | | `scripts/check_coverage.py` | **per-package** floors — see below |
 | **compliance** | `scripts/check_baa.py` | C-R1: the register is well formed |
 | **security** | `gitleaks` | a key committed by accident — irreversible once pushed |

@@ -24,8 +24,9 @@ import secrets
 from dataclasses import dataclass
 from enum import StrEnum
 
-from ait_voice.core.tenancy import TenantNotFoundError, TenantStore
+from ait_voice.core.tenancy import TenantNotFoundError
 from ait_voice.core.types import TenantContext
+from ait_voice.db.base import TenantRepository
 
 
 class Role(StrEnum):
@@ -118,10 +119,10 @@ class PrincipalStore:
         return len(self._by_token_hash)
 
 
-def resolve_scope(
+async def resolve_scope(
     principal: Principal,
     requested_tenant: str | None,
-    tenants: TenantStore,
+    tenants: TenantRepository,
 ) -> TenantContext:
     """The single place a request is bound to a tenant.
 
@@ -145,7 +146,7 @@ def resolve_scope(
         target = requested_tenant
 
     try:
-        return tenants.resolve(target or "")
+        return await tenants.resolve(target or "")
     except TenantNotFoundError as exc:
         raise ForbiddenError(f"unknown or inactive tenant: {target!r}") from exc
 

@@ -22,6 +22,7 @@ from ait_voice.core.records import (
 )
 from ait_voice.core.tenancy import TenantConfig
 from ait_voice.core.types import PHI, Region, TenantContext, Utterance
+from ait_voice.db.memory import InMemoryCallStore
 
 
 def _tenant(tenant_id: str = "northside", region: Region = Region.US) -> TenantContext:
@@ -250,15 +251,15 @@ class TestRecordingFromACall:
         """Showing a booking count that nothing produces would be dishonest."""
         assert outcome_for(self._result()) is CallOutcome.NO_ACTION
 
-    def test_recording_stores_the_record_and_the_transcript(self) -> None:
-        store = CallStore()
+    async def test_recording_stores_the_record_and_the_transcript(self) -> None:
+        store = InMemoryCallStore()
         tenant = _tenant()
         history = [
             Utterance(text=PHI("I need an appointment")),
             Utterance(text=PHI("Of course, what day?")),
         ]
 
-        record = record_call(
+        record = await record_call(
             tenant,
             self._result(),
             store,
@@ -268,18 +269,19 @@ class TestRecordingFromACall:
         )
 
         assert record.has_transcript
-        assert store.transcript(tenant, "c-1").rendered()[0]["speaker"] == "caller"
+        transcript = await store.transcript(tenant, "c-1")
+        assert transcript.rendered()[0]["speaker"] == "caller"
         assert record.caller_masked == "+1555…41"
 
-    def test_the_audit_entry_carries_no_caller_number(self) -> None:
+    async def test_the_audit_entry_carries_no_caller_number(self) -> None:
         """C-R2 — the number goes to the record, never to the security log."""
         import tempfile
 
-        store = CallStore()
+        store = InMemoryCallStore()
         tenant = _tenant()
         with tempfile.TemporaryDirectory() as tmp:
             audit = AuditLog(root=tmp)
-            record_call(
+            await record_call(
                 tenant,
                 self._result(),
                 store,
@@ -303,16 +305,17 @@ class TestRecordingFromACall:
             Speaker.CALLER,
         ]
 
-    def test_taking_a_message_records_it(self) -> None:
-        store = CallStore()
+    async def test_taking_a_message_records_it(self) -> None:
+        store = InMemoryCallStore()
         tenant = _tenant()
 
-        message = take_message(
+        message = await take_message(
             tenant, "c-1", store, note="Wants Thursday", caller_number="+15551234541"
         )
 
         assert message.is_open
-        assert store.messages(tenant, open_only=True)[0].message_id == message.message_id
+        open_messages = await store.messages(tenant, open_only=True)
+        assert open_messages[0].message_id == message.message_id
         assert message.summary()["caller_masked"] == "+1555…41"
 
 
@@ -366,22 +369,22 @@ class TestBookingOutcomes:
 
         assert outcome_for(escalated, self._appointment()) is CallOutcome.ESCALATED
 
-    def test_the_record_links_to_the_appointment(self) -> None:
-        store = CallStore()
+    async def test_the_record_links_to_the_appointment(self) -> None:
+        store = InMemoryCallStore()
         tenant = _tenant()
 
-        record = record_call(tenant, self._result(), store, appointment=self._appointment())
+        record = await record_call(tenant, self._result(), store, appointment=self._appointment())
 
         assert record.appointment_id == "a-1"
         assert record.outcome is CallOutcome.APPOINTMENT_BOOKED
 
-    def test_the_booking_audit_entry_carries_no_reason(self) -> None:
+    async def test_the_booking_audit_entry_carries_no_reason(self) -> None:
         """An appointment's reason is why someone is unwell."""
         import tempfile
 
         from ait_voice.core.scheduling import Appointment
 
-        store = CallStore()
+        store = InMemoryCallStore()
         tenant = _tenant()
         appointment = Appointment(
             appointment_id="a-1",
@@ -393,7 +396,7 @@ class TestBookingOutcomes:
 
         with tempfile.TemporaryDirectory() as tmp:
             audit = AuditLog(root=tmp)
-            record_call(tenant, self._result(), store, appointment=appointment, audit=audit)
+            await record_call(tenant, self._result(), store, appointment=appointment, audit=audit)
             entries = list(audit.read(tenant))
 
         events = [e["event"] for e in entries]
@@ -401,17 +404,17 @@ class TestBookingOutcomes:
         assert "Priya" not in str(entries)
         assert "cough" not in str(entries)
 
-    def test_a_cancellation_is_audited_as_a_cancellation(self) -> None:
+    async def test_a_cancellation_is_audited_as_a_cancellation(self) -> None:
         import tempfile
 
         from ait_voice.core.scheduling import AppointmentStatus
 
-        store = CallStore()
+        store = InMemoryCallStore()
         tenant = _tenant()
 
         with tempfile.TemporaryDirectory() as tmp:
             audit = AuditLog(root=tmp)
-            record_call(
+            await record_call(
                 tenant,
                 self._result(),
                 store,
@@ -422,15 +425,15 @@ class TestBookingOutcomes:
 
         assert "appointment_cancelled" in events
 
-    def test_a_message_is_audited(self) -> None:
+    async def test_a_message_is_audited(self) -> None:
         import tempfile
 
-        store = CallStore()
+        store = InMemoryCallStore()
         tenant = _tenant()
 
         with tempfile.TemporaryDirectory() as tmp:
             audit = AuditLog(root=tmp)
-            take_message(tenant, "c-1", store, note="Call back", audit=audit)
+            await take_message(tenant, "c-1", store, note="Call back", audit=audit)
             entries = list(audit.read(tenant))
 
         assert [e["event"] for e in entries] == ["message_taken"]

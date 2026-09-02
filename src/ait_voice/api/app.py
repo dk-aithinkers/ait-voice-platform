@@ -18,6 +18,8 @@ parameter convention, and it is what makes a separate client safe to add.
 # strings, and FastAPI silently reinterprets them as query parameters. The
 # symptom is a 422 asking for a "principal" query param on an authenticated
 # route, which is a confusing way to learn this.
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
@@ -33,17 +35,36 @@ from ait_voice.api.auth import (
     resolve_scope,
     seed_from_environment,
 )
-from ait_voice.core.handoff import HandoffQueue
-from ait_voice.core.intake import IntakeStore
-from ait_voice.core.records import CallStore
 from ait_voice.core.scheduling import (
     AppointmentNotFound,
     BookingHours,
-    Calendar,
     SlotUnavailable,
 )
-from ait_voice.core.tenancy import TenantConfig, TenantStore
+from ait_voice.core.tenancy import TenantConfig
 from ait_voice.core.types import TenantContext
+from ait_voice.db.base import (
+    CalendarRepository,
+    CallRepository,
+    ConsentRepository,
+    HandoffRepository,
+    IntakeRepository,
+    TenantRepository,
+)
+from ait_voice.db.calls import PostgresCallStore
+from ait_voice.db.connection import Database
+from ait_voice.db.consent import PostgresConsentLedger
+from ait_voice.db.handoffs import PostgresHandoffQueue
+from ait_voice.db.intake import PostgresIntakeStore
+from ait_voice.db.memory import (
+    InMemoryCalendar,
+    InMemoryCallStore,
+    InMemoryConsentLedger,
+    InMemoryHandoffQueue,
+    InMemoryIntakeStore,
+    InMemoryTenantStore,
+)
+from ait_voice.db.scheduling import PostgresCalendar
+from ait_voice.db.tenants import PostgresTenantStore
 
 
 class Services:
@@ -51,33 +72,77 @@ class Services:
 
     Held on the app rather than in module globals so tests build their own and
     two instances never share a store.
+
+    Typed against the protocols in :mod:`ait_voice.db.base`, never against a
+    concrete store. That is what makes the persistence choice a wiring decision
+    rather than something the handlers know about — and it means handing this
+    a synchronous :class:`~ait_voice.core.records.CallStore` is a type error
+    under `mypy --strict`, not a deployment that loses every call on restart.
+
+    Defaults are in-memory, so a test or the demo app can construct one with no
+    arguments and no database. :meth:`from_database` is what a real deployment
+    uses; see :mod:`ait_voice.db.memory` for why the default is not.
     """
 
     def __init__(
         self,
         *,
-        tenants: TenantStore | None = None,
-        calls: CallStore | None = None,
+        tenants: TenantRepository | None = None,
+        calls: CallRepository | None = None,
         principals: PrincipalStore | None = None,
-        calendar: Calendar | None = None,
+        calendar: CalendarRepository | None = None,
         booking_hours: BookingHours | None = None,
-        handoffs: HandoffQueue | None = None,
-        intake: IntakeStore | None = None,
+        handoffs: HandoffRepository | None = None,
+        intake: IntakeRepository | None = None,
+        consent: ConsentRepository | None = None,
     ) -> None:
-        self.tenants = tenants or TenantStore()
-        self.calls = calls or CallStore()
+        self.tenants = tenants or InMemoryTenantStore()
+        self.calls = calls or InMemoryCallStore()
         self.principals = principals or PrincipalStore()
-        self.calendar = calendar or Calendar()
+        self.calendar = calendar or InMemoryCalendar()
         # One booking policy for now. Per-clinic hours belong on TenantConfig
         # once a clinic asks for different ones; inventing that setting before
         # anyone needs it would be guessing at their diary.
         self.booking_hours = booking_hours or BookingHours()
-        self.handoffs = handoffs or HandoffQueue()
-        self.intake = intake or IntakeStore()
+        self.handoffs = handoffs or InMemoryHandoffQueue()
+        self.intake = intake or InMemoryIntakeStore()
+        # Not read by any route today — outbound consent (C-R9) is checked
+        # before a call is placed, not over HTTP. It is held here so there is
+        # one place a deployment's storage is assembled rather than two.
+        self.consent = consent or InMemoryConsentLedger()
+
+    @classmethod
+    def from_database(
+        cls,
+        database: Database,
+        *,
+        principals: PrincipalStore | None = None,
+        booking_hours: BookingHours | None = None,
+    ) -> "Services":
+        """The real wiring: every store backed by Postgres.
+
+        `principals` stays in memory deliberately. It holds API tokens rather
+        than clinic data, it is seeded from the environment at startup, and it
+        has no Postgres implementation to be inconsistent with — inventing a
+        table for it here would be scope this change has no reason to take.
+        """
+        return cls(
+            tenants=PostgresTenantStore(database),
+            calls=PostgresCallStore(database),
+            calendar=PostgresCalendar(database),
+            handoffs=PostgresHandoffQueue(database),
+            intake=PostgresIntakeStore(database),
+            consent=PostgresConsentLedger(database),
+            principals=principals,
+            booking_hours=booking_hours,
+        )
 
 
 def create_app(
-    services: Services | None = None, *, cors_origins: list[str] | None = None
+    services: Services | None = None,
+    *,
+    cors_origins: list[str] | None = None,
+    lifespan: Callable[[FastAPI], AbstractAsyncContextManager[None]] | None = None,
 ) -> FastAPI:
     services = services or Services()
     seed_from_environment(services.principals)
@@ -91,6 +156,9 @@ def create_app(
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
+        # A Postgres-backed deployment passes one to open and close the pool;
+        # the in-memory app has nothing to open. See `ait_voice.api.main`.
+        lifespan=lifespan,
     )
     app.state.services = services
 
@@ -118,12 +186,12 @@ def create_app(
             # 401 with no detail about which part failed.
             raise HTTPException(status_code=401, detail="unauthenticated") from exc
 
-    def scope(
+    async def scope(
         principal: Annotated[Principal, Depends(current_principal)],
         tenant: Annotated[str | None, Query()] = None,
     ) -> TenantContext:
         try:
-            return resolve_scope(principal, tenant, services.tenants)
+            return await resolve_scope(principal, tenant, services.tenants)
         except ForbiddenError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
 
@@ -153,16 +221,16 @@ def create_app(
     # -- clinics ---------------------------------------------------------
 
     @app.get("/api/clinics")
-    def list_clinics(principal: Operator) -> list[dict[str, Any]]:
+    async def list_clinics(principal: Operator) -> list[dict[str, Any]]:
         """Operator console, clinics list. Operator-only by definition."""
-        return [_clinic_json(c) for c in services.tenants]
+        return [_clinic_json(c) for c in await services.tenants.all()]
 
     @app.get("/api/clinic")
-    def get_clinic(tenant: Scope) -> dict[str, Any]:
-        return _clinic_json(services.tenants.get(tenant.tenant_id))
+    async def get_clinic(tenant: Scope) -> dict[str, Any]:
+        return _clinic_json(await services.tenants.get(tenant.tenant_id))
 
     @app.post("/api/clinic")
-    def update_clinic(
+    async def update_clinic(
         tenant: Scope, principal: Operator, changes: dict[str, Any]
     ) -> dict[str, Any]:
         """Clinic configuration. Operator-only: the clinic surface is read-only.
@@ -175,26 +243,26 @@ def create_app(
         unknown = set(changes) - allowed
         if unknown:
             raise HTTPException(status_code=400, detail=f"unknown field(s): {sorted(unknown)}")
-        updated = services.tenants.update(tenant.tenant_id, **changes)
+        updated = await services.tenants.update(tenant.tenant_id, **changes)
         return _clinic_json(updated)
 
     # -- calls -----------------------------------------------------------
 
     @app.get("/api/calls")
-    def list_calls(
+    async def list_calls(
         tenant: Scope, limit: Annotated[int, Query(ge=1, le=200)] = 50
     ) -> list[dict[str, Any]]:
         """Recent calls. Numbers are masked in `summary()`, not by the client."""
-        return [r.summary() for r in services.calls.recent(tenant, limit=limit)]
+        return [r.summary() for r in await services.calls.recent(tenant, limit=limit)]
 
     @app.get("/api/calls/{call_id}")
-    def get_call(tenant: Scope, call_id: str) -> dict[str, Any]:
-        record = services.calls.get(tenant, call_id)
+    async def get_call(tenant: Scope, call_id: str) -> dict[str, Any]:
+        record = await services.calls.get(tenant, call_id)
         if record is None:
             # 404 rather than 403 for another tenant's call id: distinguishing
             # them would confirm the id exists somewhere.
             raise HTTPException(status_code=404, detail="no such call")
-        transcript = services.calls.transcript(tenant, call_id)
+        transcript = await services.calls.transcript(tenant, call_id)
         return {
             **record.summary(),
             "caller_masked": record.caller_masked,
@@ -202,8 +270,10 @@ def create_app(
         }
 
     @app.get("/api/summary")
-    def activity(tenant: Scope, days: Annotated[int, Query(ge=1, le=90)] = 7) -> dict[str, Any]:
-        summary = services.calls.summarize(tenant, window_days=days)
+    async def activity(
+        tenant: Scope, days: Annotated[int, Query(ge=1, le=90)] = 7
+    ) -> dict[str, Any]:
+        summary = await services.calls.summarize(tenant, window_days=days)
         return {
             "window_days": summary.window_days,
             "calls_answered": summary.calls_answered,
@@ -218,21 +288,21 @@ def create_app(
     # -- messages --------------------------------------------------------
 
     @app.get("/api/messages")
-    def list_messages(tenant: Scope, open_only: bool = False) -> list[dict[str, Any]]:
+    async def list_messages(tenant: Scope, open_only: bool = False) -> list[dict[str, Any]]:
         """The callback queue. Notes are revealed here — this is the detail view."""
         return [
             m.summary(reveal_note=True)
-            for m in services.calls.messages(tenant, open_only=open_only)
+            for m in await services.calls.messages(tenant, open_only=open_only)
         ]
 
     @app.post("/api/messages/{message_id}/resolve")
-    def resolve_message(tenant: Scope, message_id: str) -> dict[str, Any]:
+    async def resolve_message(tenant: Scope, message_id: str) -> dict[str, Any]:
         """Mark a callback as made.
 
         Writable by a clinic user, which is the one exception to the read-only
         clinic surface: the obligation is theirs, so discharging it must be too.
         """
-        resolved = services.calls.resolve_message(tenant, message_id, at=datetime.now(UTC))
+        resolved = await services.calls.resolve_message(tenant, message_id, at=datetime.now(UTC))
         if resolved is None:
             raise HTTPException(status_code=404, detail="no such message")
         return resolved.summary(reveal_note=True)
@@ -240,7 +310,7 @@ def create_app(
     # -- appointments ----------------------------------------------------
 
     @app.get("/api/appointments")
-    def list_appointments(
+    async def list_appointments(
         tenant: Scope, limit: Annotated[int, Query(ge=1, le=200)] = 50
     ) -> list[dict[str, Any]]:
         """Upcoming appointments — FR6.4.
@@ -249,34 +319,34 @@ def create_app(
         the agent is what books. Summaries carry no patient name; a diary needs
         times, not identities.
         """
-        config = services.tenants.get(tenant.tenant_id)
+        config = await services.tenants.get(tenant.tenant_id)
         return [
             {
                 **appointment.summary(),
                 "local_start": appointment.local_start(config).isoformat(),
                 "spoken": appointment.spoken(config),
             }
-            for appointment in services.calendar.upcoming(tenant, limit=limit)
+            for appointment in await services.calendar.upcoming(tenant, limit=limit)
         ]
 
     @app.get("/api/availability")
-    def availability(
+    async def availability(
         tenant: Scope, limit: Annotated[int, Query(ge=1, le=50)] = 10
     ) -> list[dict[str, str]]:
         """Free slots, so an operator can see what the agent would offer."""
-        config = services.tenants.get(tenant.tenant_id)
+        config = await services.tenants.get(tenant.tenant_id)
         return [
             {
                 "starts_at": slot.isoformat(),
                 "local_start": slot.astimezone(config.tz).isoformat(),
             }
-            for slot in services.calendar.availability(
+            for slot in await services.calendar.availability(
                 tenant, config, services.booking_hours, limit=limit
             )
         ]
 
     @app.post("/api/appointments/{appointment_id}/cancel")
-    def cancel_appointment(
+    async def cancel_appointment(
         tenant: Scope, principal: Operator, appointment_id: str
     ) -> dict[str, Any]:
         """Cancel on the clinic's behalf. Operator-only — see above.
@@ -285,7 +355,7 @@ def create_app(
         appointment is worse off than before the agent existed.
         """
         try:
-            cancelled = services.calendar.cancel(tenant, appointment_id)
+            cancelled = await services.calendar.cancel(tenant, appointment_id)
         except AppointmentNotFound as exc:
             raise HTTPException(status_code=404, detail="no such appointment") from exc
         return cancelled.summary()
@@ -293,37 +363,41 @@ def create_app(
     # -- handoffs --------------------------------------------------------
 
     @app.get("/api/handoffs")
-    def list_handoffs(tenant: Scope, open_only: bool = True) -> list[dict[str, Any]]:
+    async def list_handoffs(tenant: Scope, open_only: bool = True) -> list[dict[str, Any]]:
         """The queue of calls waiting for a person.
 
         Summaries only — no PHI. The briefing is fetched per record, so a list
         left open on a screen does not display what every caller said.
         """
-        records = services.handoffs.pending(tenant) if open_only else services.handoffs.all(tenant)
+        records = (
+            await services.handoffs.pending(tenant)
+            if open_only
+            else await services.handoffs.all(tenant)
+        )
         return [record.summary() for record in records]
 
     @app.get("/api/handoffs/{handoff_id}")
-    def get_handoff(tenant: Scope, handoff_id: str) -> dict[str, Any]:
+    async def get_handoff(tenant: Scope, handoff_id: str) -> dict[str, Any]:
         """The briefing a person reads before picking the call up — C-T6.
 
         This is the one endpoint that deliberately returns what the caller
         said. Withholding it is the failure the whole feature exists to
         prevent, and it is reachable only by a principal scoped to this tenant.
         """
-        record = services.handoffs.get(tenant, handoff_id)
+        record = await services.handoffs.get(tenant, handoff_id)
         if record is None:
             raise HTTPException(status_code=404, detail="no such handoff")
         return {**record.summary(), "briefing": record.context.for_human()}
 
     @app.post("/api/handoffs/{handoff_id}/acknowledge")
-    def acknowledge_handoff(tenant: Scope, principal: Me, handoff_id: str) -> dict[str, Any]:
+    async def acknowledge_handoff(tenant: Scope, principal: Me, handoff_id: str) -> dict[str, Any]:
         """Mark that a person has picked this up.
 
         Writable by a clinic user: the obligation is theirs, so recording that
         they met it must be theirs too — the same exception the callback queue
         already makes.
         """
-        record = services.handoffs.acknowledge(tenant, handoff_id, by=principal.principal_id)
+        record = await services.handoffs.acknowledge(tenant, handoff_id, by=principal.principal_id)
         if record is None:
             raise HTTPException(status_code=404, detail="no such handoff")
         return record.summary()
@@ -331,7 +405,7 @@ def create_app(
     # -- intake ----------------------------------------------------------
 
     @app.get("/api/intake")
-    def list_intake(
+    async def list_intake(
         tenant: Scope, limit: Annotated[int, Query(ge=1, le=200)] = 50
     ) -> list[dict[str, Any]]:
         """Which intakes exist and what they hold — not what they say.
@@ -340,29 +414,29 @@ def create_app(
         a clinic to see the work was done without a date of birth on a screen
         at a front desk.
         """
-        return [record.summary() for record in services.intake.recent(tenant, limit=limit)]
+        return [record.summary() for record in await services.intake.recent(tenant, limit=limit)]
 
     @app.get("/api/intake/{intake_id}")
-    def get_intake(tenant: Scope, intake_id: str) -> dict[str, Any]:
+    async def get_intake(tenant: Scope, intake_id: str) -> dict[str, Any]:
         """The captured details, for a person who needs to act on them.
 
         Every value here was read back to the caller and confirmed aloud
         (FR3.2), which is what makes it safe to act on.
         """
-        record = services.intake.get(tenant, intake_id)
+        record = await services.intake.get(tenant, intake_id)
         if record is None:
             raise HTTPException(status_code=404, detail="no such intake")
         return {**record.summary(), "details": record.for_clinician()}
 
     @app.post("/api/intake/{intake_id}/erase")
-    def erase_intake(tenant: Scope, principal: Operator, intake_id: str) -> dict[str, Any]:
+    async def erase_intake(tenant: Scope, principal: Operator, intake_id: str) -> dict[str, Any]:
         """Erase captured details on request — DPDP, and good practice anyway.
 
         Operator-only, and irreversible. The call record and the audit entry
         survive: the clinic still knows the call happened and the security log
         still holds the fact, because those carry no personal data.
         """
-        erased = services.intake.erase(tenant, intake_id)
+        erased = await services.intake.erase(tenant, intake_id)
         if not erased:
             raise HTTPException(status_code=404, detail="no such intake")
         return {"intake_id": intake_id, "erased": True}
