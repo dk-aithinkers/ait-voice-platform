@@ -301,12 +301,23 @@ class TestPHIHandling:
             assert isinstance(capture.value, PHI)
 
     def test_the_summary_shows_which_fields_exist_not_their_values(self) -> None:
-        """A front-desk screen should not display a date of birth."""
+        """A front-desk screen should not display a date of birth.
+
+        Asserted against each whole captured value rather than a fragment of
+        one, and driven from the record rather than hardcoded. The previous
+        version checked `"1985" not in rendered`, but `summary()` legitimately
+        carries a random uuid as `intake_id`, and a uuid4 contains the substring
+        `1985` about once every 4,700 runs — so this failed in CI on a commit
+        that had nothing to do with intake. A four-digit fragment is not a test
+        of anything; the whole value is, and cannot collide with a uuid.
+        """
         record = _complete(IntakeSession()).completed(call_id="c-1", tenant_id="northside")
 
         rendered = str(record.summary())
-        assert "Priya" not in rendered
-        assert "1985" not in rendered
+
+        for field, value in record.for_clinician().items():
+            assert value not in rendered, f"{field} leaked into the list view"
+        # Field names are the point of the list view, so they must be there.
         assert "full_name" in rendered
 
     def test_the_clinician_view_reveals_deliberately(self) -> None:
