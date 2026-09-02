@@ -29,6 +29,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
 
+from ait_voice.core.audit import AuditEntry, AuditEvent
 from ait_voice.core.consent import Consent, ConsentPurpose
 from ait_voice.core.handoff import HandoffContext, HandoffDecision, HandoffRecord
 from ait_voice.core.intake import IntakeRecord
@@ -36,6 +37,35 @@ from ait_voice.core.records import ActivitySummary, CallRecord, Message, Transcr
 from ait_voice.core.scheduling import Appointment, BookingHours
 from ait_voice.core.tenancy import TenantConfig
 from ait_voice.core.types import Region, TenantContext
+
+
+@runtime_checkable
+class AuditSink(Protocol):
+    """The immutable security record — C-R7, and the P3 audit requirement.
+
+    Two implementations with genuinely different guarantees, which is why this
+    protocol exists rather than one class with a flag.
+    :class:`~ait_voice.core.audit.AuditLog` appends JSON lines to local disk and
+    is single-writer by construction; :class:`~ait_voice.db.s3_audit.S3AuditLog`
+    is what a deployment uses, where immutability is enforced by S3 Object Lock
+    rather than by our own good intentions.
+
+    `read` returns a list rather than yielding, because the S3 sink pages over
+    objects and cannot stream lazily without holding a connection open for the
+    life of the iteration.
+    """
+
+    async def record(
+        self,
+        tenant: TenantContext,
+        event: AuditEvent,
+        *,
+        call_id: str | None = None,
+        caller_ref: str | None = None,
+        **detail: str | int | float | bool,
+    ) -> AuditEntry: ...
+    async def read(self, tenant: TenantContext) -> list[dict[str, Any]]: ...
+    async def verify(self, tenant: TenantContext) -> bool: ...
 
 
 @runtime_checkable

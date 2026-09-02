@@ -36,6 +36,12 @@ api = [
 postgres = [
     "asyncpg>=0.31.0",
 ]
+# The audit sink only. Kept an extra rather than a core dependency because a
+# development machine and CI both run the filesystem log and should not need
+# an AWS SDK to do it.
+aws = [
+    "boto3>=1.35.0",
+]
 
 [project.scripts]
 ait-voice = "ait_voice.cli:main"

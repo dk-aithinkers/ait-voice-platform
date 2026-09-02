@@ -247,7 +247,7 @@ class TestRecordingFromACall:
             is CallOutcome.FAILED
         )
 
-    def test_an_ordinary_call_is_no_action_until_booking_exists(self) -> None:
+    async def test_an_ordinary_call_is_no_action_until_booking_exists(self) -> None:
         """Showing a booking count that nothing produces would be dishonest."""
         assert outcome_for(self._result()) is CallOutcome.NO_ACTION
 
@@ -289,13 +289,13 @@ class TestRecordingFromACall:
                 duration_seconds=12.0,
                 audit=audit,
             )
-            entries = list(audit.read(tenant))
+            entries = await audit.read(tenant)
 
         assert entries
         assert "+15551234541" not in str(entries)
         assert entries[0]["caller_ref"].startswith("caller-")
 
-    def test_transcript_speakers_alternate_from_the_caller(self) -> None:
+    async def test_transcript_speakers_alternate_from_the_caller(self) -> None:
         transcript = transcript_from(
             "c-1", [Utterance(text=PHI("a")), Utterance(text=PHI("b")), Utterance(text=PHI("c"))]
         )
@@ -363,7 +363,7 @@ class TestBookingOutcomes:
             is CallOutcome.NO_ACTION
         )
 
-    def test_escalation_wins_over_a_booking(self) -> None:
+    async def test_escalation_wins_over_a_booking(self) -> None:
         """Somebody still has to pick up the phone; a green tick would hide that."""
         escalated = self._result(escalated=True, escalation_reason="caller_requested_human")
 
@@ -397,7 +397,7 @@ class TestBookingOutcomes:
         with tempfile.TemporaryDirectory() as tmp:
             audit = AuditLog(root=tmp)
             await record_call(tenant, self._result(), store, appointment=appointment, audit=audit)
-            entries = list(audit.read(tenant))
+            entries = await audit.read(tenant)
 
         events = [e["event"] for e in entries]
         assert "appointment_booked" in events
@@ -421,7 +421,7 @@ class TestBookingOutcomes:
                 appointment=self._appointment(AppointmentStatus.CANCELLED),
                 audit=audit,
             )
-            events = [e["event"] for e in audit.read(tenant)]
+            events = [e["event"] for e in await audit.read(tenant)]
 
         assert "appointment_cancelled" in events
 
@@ -434,7 +434,7 @@ class TestBookingOutcomes:
         with tempfile.TemporaryDirectory() as tmp:
             audit = AuditLog(root=tmp)
             await take_message(tenant, "c-1", store, note="Call back", audit=audit)
-            entries = list(audit.read(tenant))
+            entries = await audit.read(tenant)
 
         assert [e["event"] for e in entries] == ["message_taken"]
         assert "Call back" not in str(entries)

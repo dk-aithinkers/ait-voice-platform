@@ -52,31 +52,31 @@ def content(tmp_path: Path) -> ContentStore:
 
 
 class TestAuditLogCarriesNoPersonalData:
-    def test_phi_in_detail_is_refused(self, audit: AuditLog) -> None:
+    async def test_phi_in_detail_is_refused(self, audit: AuditLog) -> None:
         with pytest.raises(AuditIntegrityError, match="is PHI"):
             # Deliberately the wrong type — the guard refusing it is the test.
-            audit.record(
+            await audit.record(
                 _us(),
                 AuditEvent.CALL_STARTED,
                 patient=PHI("Priya Sharma"),  # type: ignore[arg-type]
             )
 
-    def test_long_strings_are_refused_as_content(self, audit: AuditLog) -> None:
+    async def test_long_strings_are_refused_as_content(self, audit: AuditLog) -> None:
         """A long string is content, whatever it is called."""
         with pytest.raises(AuditIntegrityError, match="content"):
-            audit.record(
+            await audit.record(
                 _us(),
                 AuditEvent.TURN_COMPLETED,
                 note="the caller said they had been experiencing symptoms since Tuesday",
             )
 
-    def test_non_scalar_detail_is_refused(self, audit: AuditLog) -> None:
+    async def test_non_scalar_detail_is_refused(self, audit: AuditLog) -> None:
         with pytest.raises(AuditIntegrityError, match="only scalars"):
             # A non-scalar, refused by design.
-            audit.record(_us(), AuditEvent.CALL_STARTED, turns=[1, 2, 3])  # type: ignore[arg-type]
+            await audit.record(_us(), AuditEvent.CALL_STARTED, turns=[1, 2, 3])  # type: ignore[arg-type]
 
-    def test_identifiers_and_codes_are_accepted(self, audit: AuditLog) -> None:
-        entry = audit.record(
+    async def test_identifiers_and_codes_are_accepted(self, audit: AuditLog) -> None:
+        entry = await audit.record(
             _us(),
             AuditEvent.TURN_COMPLETED,
             call_id="c-1",
@@ -88,13 +88,15 @@ class TestAuditLogCarriesNoPersonalData:
         )
         assert entry.detail["turn"] == 2
 
-    def test_a_written_log_contains_no_patient_data(self, audit: AuditLog, tmp_path: Path) -> None:
+    async def test_a_written_log_contains_no_patient_data(
+        self, audit: AuditLog, tmp_path: Path
+    ) -> None:
         """The property that matters, asserted against the bytes on disk."""
         tenant = _us()
         ref = caller_ref("+15551234567", tenant_id=tenant.tenant_id)
 
-        audit.record(tenant, AuditEvent.CALL_STARTED, call_id="c-1", caller_ref=ref)
-        audit.record(tenant, AuditEvent.ESCALATED, call_id="c-1", reason="clinical")
+        await audit.record(tenant, AuditEvent.CALL_STARTED, call_id="c-1", caller_ref=ref)
+        await audit.record(tenant, AuditEvent.ESCALATED, call_id="c-1", reason="clinical")
 
         raw = (tmp_path / "audit" / "us" / "clinic-us.jsonl").read_text()
         assert "+15551234567" not in raw
@@ -119,41 +121,43 @@ class TestCallerReference:
 
 
 class TestAuditLogIntegrity:
-    def test_chain_verifies_when_untouched(self, audit: AuditLog) -> None:
+    async def test_chain_verifies_when_untouched(self, audit: AuditLog) -> None:
         tenant = _us()
         for i in range(4):
-            audit.record(tenant, AuditEvent.TURN_COMPLETED, call_id="c-1", turn=i)
+            await audit.record(tenant, AuditEvent.TURN_COMPLETED, call_id="c-1", turn=i)
 
-        assert audit.verify(tenant) is True
+        assert await audit.verify(tenant) is True
 
-    def test_tampering_with_an_entry_is_detected(self, audit: AuditLog, tmp_path: Path) -> None:
+    async def test_tampering_with_an_entry_is_detected(
+        self, audit: AuditLog, tmp_path: Path
+    ) -> None:
         tenant = _us()
-        audit.record(tenant, AuditEvent.CALL_STARTED, call_id="c-1")
-        audit.record(tenant, AuditEvent.CALL_ENDED, call_id="c-1", turns=3)
+        await audit.record(tenant, AuditEvent.CALL_STARTED, call_id="c-1")
+        await audit.record(tenant, AuditEvent.CALL_ENDED, call_id="c-1", turns=3)
 
         path = tmp_path / "audit" / "us" / "clinic-us.jsonl"
         rows = [json.loads(line) for line in path.read_text().splitlines()]
         rows[1]["detail"]["turns"] = 99
         path.write_text("\n".join(json.dumps(r, sort_keys=True) for r in rows) + "\n")
 
-        assert audit.verify(tenant) is False
+        assert await audit.verify(tenant) is False
 
-    def test_removing_an_entry_is_detected(self, audit: AuditLog, tmp_path: Path) -> None:
+    async def test_removing_an_entry_is_detected(self, audit: AuditLog, tmp_path: Path) -> None:
         """Append-only means a deletion must not go unnoticed."""
         tenant = _us()
         for i in range(3):
-            audit.record(tenant, AuditEvent.TURN_COMPLETED, call_id="c-1", turn=i)
+            await audit.record(tenant, AuditEvent.TURN_COMPLETED, call_id="c-1", turn=i)
 
         path = tmp_path / "audit" / "us" / "clinic-us.jsonl"
         lines = path.read_text().splitlines()
         path.write_text("\n".join([lines[0], lines[2]]) + "\n")
 
-        assert audit.verify(tenant) is False
+        assert await audit.verify(tenant) is False
 
-    def test_entries_are_region_partitioned(self, audit: AuditLog, tmp_path: Path) -> None:
+    async def test_entries_are_region_partitioned(self, audit: AuditLog, tmp_path: Path) -> None:
         """Region determines retention and residency; trees never mix."""
-        audit.record(_us(), AuditEvent.CALL_STARTED)
-        audit.record(_india(), AuditEvent.CALL_STARTED)
+        await audit.record(_us(), AuditEvent.CALL_STARTED)
+        await audit.record(_india(), AuditEvent.CALL_STARTED)
 
         assert (tmp_path / "audit" / "us" / "clinic-us.jsonl").exists()
         assert (tmp_path / "audit" / "india" / "clinic-in.jsonl").exists()
@@ -166,49 +170,49 @@ class TestRetentionAndErasureCoexist:
     purpose ends. Both hold here because they apply to different files.
     """
 
-    def test_erasing_content_leaves_the_audit_record(
+    async def test_erasing_content_leaves_the_audit_record(
         self, audit: AuditLog, content: ContentStore
     ) -> None:
         tenant = _india()
         transcript = [PHI("I'd like to book"), PHI("Tuesday please")]
 
-        content.store(tenant, "c-1", transcript, audit=audit)
+        await content.store(tenant, "c-1", transcript, audit=audit)
         assert content.exists(tenant, "c-1")
 
-        content.erase(tenant, "c-1", audit=audit)
+        await content.erase(tenant, "c-1", audit=audit)
 
         assert not content.exists(tenant, "c-1"), "content must be gone"
-        events = [row["event"] for row in audit.read(tenant)]
+        events = [row["event"] for row in await audit.read(tenant)]
         assert "content_stored" in events
         assert "content_erased" in events, "the security record must survive erasure"
 
-    def test_the_audit_entry_of_storage_holds_no_transcript(
+    async def test_the_audit_entry_of_storage_holds_no_transcript(
         self, audit: AuditLog, content: ContentStore, tmp_path: Path
     ) -> None:
         tenant = _india()
-        content.store(tenant, "c-1", [PHI("my name is Priya Sharma")], audit=audit)
+        await content.store(tenant, "c-1", [PHI("my name is Priya Sharma")], audit=audit)
 
         raw = (tmp_path / "audit" / "india" / "clinic-in.jsonl").read_text()
         assert "Priya" not in raw
         assert "turn_count" in raw, "it records how much, not what"
 
-    def test_erasing_absent_content_is_recorded_honestly(
+    async def test_erasing_absent_content_is_recorded_honestly(
         self, audit: AuditLog, content: ContentStore
     ) -> None:
         tenant = _india()
-        assert content.erase(tenant, "never-existed", audit=audit) is False
+        assert await content.erase(tenant, "never-existed", audit=audit) is False
 
-        entry = next(r for r in audit.read(tenant) if r["event"] == "content_erased")
+        entry = next(r for r in await audit.read(tenant) if r["event"] == "content_erased")
         assert entry["detail"]["existed"] is False
 
-    def test_chain_still_verifies_after_erasure(
+    async def test_chain_still_verifies_after_erasure(
         self, audit: AuditLog, content: ContentStore
     ) -> None:
         tenant = _india()
-        content.store(tenant, "c-1", [PHI("hello")], audit=audit)
-        content.erase(tenant, "c-1", audit=audit)
+        await content.store(tenant, "c-1", [PHI("hello")], audit=audit)
+        await content.erase(tenant, "c-1", audit=audit)
 
-        assert audit.verify(tenant) is True
+        assert await audit.verify(tenant) is True
 
 
 class TestConsentExpiry:
@@ -328,78 +332,78 @@ class TestAuditChainSurvivesRestart:
     and an audit log whose chain restarts is not tamper-evident.
     """
 
-    def test_a_second_process_chains_onto_the_existing_log(self, tmp_path) -> None:  # noqa: ANN001
+    async def test_a_second_process_chains_onto_the_existing_log(self, tmp_path) -> None:  # noqa: ANN001
         tenant = TenantContext(tenant_id="northside", region=Region.US)
 
         first = AuditLog(root=tmp_path)
-        first.record(tenant, AuditEvent.CALL_STARTED, call_id="c-1")
-        first.record(tenant, AuditEvent.CALL_ENDED, call_id="c-1")
+        await first.record(tenant, AuditEvent.CALL_STARTED, call_id="c-1")
+        await first.record(tenant, AuditEvent.CALL_ENDED, call_id="c-1")
 
         # A fresh instance, as after a restart — no in-memory hash to carry.
         second = AuditLog(root=tmp_path)
-        second.record(tenant, AuditEvent.CALL_STARTED, call_id="c-2")
+        await second.record(tenant, AuditEvent.CALL_STARTED, call_id="c-2")
 
-        assert second.verify(tenant), "the chain broke across a restart"
-        assert len(list(second.read(tenant))) == 3
+        assert await second.verify(tenant), "the chain broke across a restart"
+        assert len(await second.read(tenant)) == 3
 
-    def test_the_chain_links_across_the_restart_boundary(self, tmp_path) -> None:  # noqa: ANN001
+    async def test_the_chain_links_across_the_restart_boundary(self, tmp_path) -> None:  # noqa: ANN001
         tenant = TenantContext(tenant_id="northside", region=Region.US)
         first = AuditLog(root=tmp_path)
-        first.record(tenant, AuditEvent.CALL_STARTED, call_id="c-1")
+        await first.record(tenant, AuditEvent.CALL_STARTED, call_id="c-1")
 
         second = AuditLog(root=tmp_path)
-        second.record(tenant, AuditEvent.CALL_ENDED, call_id="c-1")
+        await second.record(tenant, AuditEvent.CALL_ENDED, call_id="c-1")
 
-        entries = list(second.read(tenant))
+        entries = await second.read(tenant)
         assert entries[1]["previous_hash"] == entries[0]["hash"]
 
-    def test_a_blank_line_in_the_log_does_not_break_resumption(self, tmp_path) -> None:  # noqa: ANN001
+    async def test_a_blank_line_in_the_log_does_not_break_resumption(self, tmp_path) -> None:  # noqa: ANN001
         """Files acquire trailing newlines; that must not restart the chain."""
         tenant = TenantContext(tenant_id="northside", region=Region.US)
         first = AuditLog(root=tmp_path)
-        first.record(tenant, AuditEvent.CALL_STARTED, call_id="c-1")
+        await first.record(tenant, AuditEvent.CALL_STARTED, call_id="c-1")
 
         path = tmp_path / "us" / "northside.jsonl"
         path.write_text(path.read_text() + "\n")
 
-        AuditLog(root=tmp_path).record(tenant, AuditEvent.CALL_ENDED, call_id="c-1")
+        await AuditLog(root=tmp_path).record(tenant, AuditEvent.CALL_ENDED, call_id="c-1")
 
-        assert AuditLog(root=tmp_path).verify(tenant)
+        assert await AuditLog(root=tmp_path).verify(tenant)
 
-    def test_reading_a_tenant_with_no_log_yields_nothing(self, tmp_path) -> None:  # noqa: ANN001
+    async def test_reading_a_tenant_with_no_log_yields_nothing(self, tmp_path) -> None:  # noqa: ANN001
         """A clinic that has taken no calls is not an error."""
         tenant = TenantContext(tenant_id="brand-new", region=Region.US)
 
-        assert list(AuditLog(root=tmp_path).read(tenant)) == []
-        assert AuditLog(root=tmp_path).verify(tenant) is True
+        assert await AuditLog(root=tmp_path).read(tenant) == []
+        assert await AuditLog(root=tmp_path).verify(tenant) is True
 
 
 class TestContentStoreWithoutAudit:
     """The audit log is optional on the content store, and both paths matter."""
 
-    def test_content_can_be_stored_without_an_audit_log(self, tmp_path) -> None:  # noqa: ANN001
+    async def test_content_can_be_stored_without_an_audit_log(self, tmp_path) -> None:  # noqa: ANN001
         tenant = TenantContext(tenant_id="northside", region=Region.US)
         store = ContentStore(root=tmp_path)
 
-        path = store.store(tenant, "c-1", [PHI("hello")])
+        path = await store.store(tenant, "c-1", [PHI("hello")])
 
         assert path.exists()
         assert store.exists(tenant, "c-1")
 
-    def test_content_can_be_erased_without_an_audit_log(self, tmp_path) -> None:  # noqa: ANN001
+    async def test_content_can_be_erased_without_an_audit_log(self, tmp_path) -> None:  # noqa: ANN001
         tenant = TenantContext(tenant_id="northside", region=Region.US)
         store = ContentStore(root=tmp_path)
-        store.store(tenant, "c-1", [PHI("hello")])
+        await store.store(tenant, "c-1", [PHI("hello")])
 
-        assert store.erase(tenant, "c-1") is True
+        assert await store.erase(tenant, "c-1") is True
         assert not store.exists(tenant, "c-1")
 
-    def test_erasing_absent_content_reports_it_did_not_exist(self, tmp_path) -> None:  # noqa: ANN001
+    async def test_erasing_absent_content_reports_it_did_not_exist(self, tmp_path) -> None:  # noqa: ANN001
         """Recorded rather than swallowed: an erasure request for content that
         was already gone is a different fact from one that deleted something."""
         tenant = TenantContext(tenant_id="northside", region=Region.US)
 
-        assert ContentStore(root=tmp_path).erase(tenant, "never-existed") is False
+        assert await ContentStore(root=tmp_path).erase(tenant, "never-existed") is False
 
 
 class TestStorageRoots:
