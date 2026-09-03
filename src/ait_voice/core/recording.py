@@ -14,7 +14,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from ait_voice.core.audit import AuditEvent, AuditLog, caller_ref
+from ait_voice.core.audit import AuditEvent, caller_ref
 from ait_voice.core.pipeline import CallResult
 from ait_voice.core.records import (
     CallOutcome,
@@ -26,7 +26,7 @@ from ait_voice.core.records import (
 )
 from ait_voice.core.scheduling import Appointment, AppointmentStatus
 from ait_voice.core.types import PHI, TenantContext, Utterance
-from ait_voice.db.base import CallRepository
+from ait_voice.db.base import AuditSink, CallRepository
 
 #: What a booking action means for the call's recorded outcome.
 _BOOKING_OUTCOMES = {
@@ -84,7 +84,7 @@ async def record_call(
     duration_seconds: float = 0.0,
     language: str = "en",
     appointment: Appointment | None = None,
-    audit: AuditLog | None = None,
+    audit: AuditSink | None = None,
 ) -> CallRecord:
     """Persist a finished call, and note in the audit log that it happened.
 
@@ -150,7 +150,7 @@ async def take_message(
     note: str,
     caller_number: str | None = None,
     at: datetime | None = None,
-    audit: AuditLog | None = None,
+    audit: AuditSink | None = None,
 ) -> Message:
     """Record a callback the agent promised on the clinic's behalf.
 

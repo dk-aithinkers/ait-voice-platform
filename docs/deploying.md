@@ -88,11 +88,38 @@ ALTER ROLE ait_app PASSWORD '<AppDbSecretArn -> password>';
 configured. **PHI must not traverse that listener.** A certificate and an
 HTTPS-only listener are required before a real call reaches this.
 
-**The voice service is not deployed.** The image has two entrypoints by design,
-but only the API has one today: `providers/twilio_telephony.py` exposes a
-WebSocket server and there is no HTTP webhook returning TwiML, so there is
-nothing for Twilio to call. That endpoint is the next piece of work, and it
-lands in the same cluster as a second ECS service.
+**The voice service exists but has no ECS task definition yet.** The image's
+second entrypoint runs it:
+
+```bash
+uv run uvicorn --factory ait_voice.api.voice_main:voice_app
+```
+
+It needs, and refuses to start without, all of:
+
+| Variable | Why it refuses |
+|---|---|
+| `AIT_RELAY_WS_URL` | the `wss://` address put in the TwiML; without it Twilio is told to connect nowhere |
+| | must be `wss://` — a plain `ws://` carries the transcript in clear text, and C-R2 makes that PHI |
+| `TWILIO_AUTH_TOKEN` | validates the webhook signature; absent, every request would have to be treated as forged, which is the same as accepting them all |
+| `AIT_RELAY_TOKEN_SECRET` | signs the token authorising a relay socket; absent, the WebSocket accepts anyone |
+
+Two things about its security are worth knowing before it is exposed.
+
+The **webhook is signed by Twilio** and the signature is checked, using Twilio's
+own validator rather than a reimplementation.
+
+The **WebSocket is not signed by anything**. Twilio opens a plain connection to
+whatever URL the TwiML named, carrying no credential. So the webhook mints a
+short-lived HMAC token binding the call to its tenant and the URL carries it;
+the socket verifies before accepting. That also solves tenant continuity across
+tasks — with two containers behind a load balancer, the webhook and the socket
+land on different ones, so the tenant cannot be remembered between them.
+
+A US call is currently **refused at the socket** by the BAA gate, and that is
+C-R1 working rather than a defect: `compliance/baa-register.toml` has no
+executed agreement for Twilio. India calls are unaffected. When that refusal
+stops firing, D-05 has completed.
 
 **The CI deploy role is wider than it should be.** `PowerUserAccess` plus IAM is
 enough for CDK and more than a production deploy role should carry. Narrowing it

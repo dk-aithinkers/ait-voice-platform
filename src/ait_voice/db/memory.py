@@ -84,6 +84,18 @@ class InMemoryTenantStore:
     async def count(self) -> int:
         return len(self.inner)
 
+    async def claim_number(self, tenant_id: str, number: str, *, label: str | None = None) -> str:
+        return self.inner.claim_number(tenant_id, number, label=label)
+
+    async def release_number(self, number: str) -> bool:
+        return self.inner.release_number(number)
+
+    async def numbers(self, tenant_id: str) -> list[str]:
+        return self.inner.numbers(tenant_id)
+
+    async def resolve_number(self, number: str) -> TenantContext:
+        return self.inner.resolve_number(number)
+
 
 class InMemoryCallStore:
     """Satisfies :class:`~ait_voice.db.base.CallRepository`."""

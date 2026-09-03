@@ -10,10 +10,12 @@ from __future__ import annotations
 from typing import Any
 
 from ait_voice.core.tenancy import (
+    NumberAlreadyClaimed,
     OutOfHoursPolicy,
     StaffedHours,
     TenantConfig,
     TenantNotFoundError,
+    normalize_e164,
 )
 from ait_voice.core.types import Region, TenantContext
 from ait_voice.db.connection import Database
@@ -121,6 +123,71 @@ class PostgresTenantStore:
         purpose is that this history outlives the clinic's activity.
         """
         return await self.update(tenant_id, active=False)
+
+    # -- inbound routing -------------------------------------------------
+
+    async def claim_number(self, tenant_id: str, number: str, *, label: str | None = None) -> str:
+        """Route `number` to this clinic, with the database deciding conflicts.
+
+        The primary key on `phone_number` is what makes one number map to one
+        clinic. Two operators claiming the same number at the same moment cannot
+        both win, and the loser gets a refusal rather than a silent reassignment
+        that would send a clinic's callers to somebody else's agent.
+
+        `ON CONFLICT DO NOTHING` then a read-back, rather than an upsert:
+        an upsert would quietly move a live number between clinics.
+        """
+        await self.get(tenant_id)  # Raises if the tenant does not exist.
+        normalized = normalize_e164(number)
+        async with self._db.unscoped() as connection:
+            await connection.execute(
+                """
+                INSERT INTO tenant_numbers (phone_number, tenant_id, label)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (phone_number) DO NOTHING
+                """,
+                normalized,
+                tenant_id,
+                label,
+            )
+            owner = await connection.fetchval(
+                "SELECT tenant_id FROM tenant_numbers WHERE phone_number = $1", normalized
+            )
+        if owner != tenant_id:
+            raise NumberAlreadyClaimed(
+                f"{normalized} is already routed to tenant {owner!r}. Release it "
+                "there before claiming it here."
+            )
+        return normalized
+
+    async def release_number(self, number: str) -> bool:
+        normalized = normalize_e164(number)
+        async with self._db.unscoped() as connection:
+            result = await connection.execute(
+                "DELETE FROM tenant_numbers WHERE phone_number = $1", normalized
+            )
+        # asyncpg returns the command tag, e.g. "DELETE 1".
+        return str(result).endswith(" 1")
+
+    async def numbers(self, tenant_id: str) -> list[str]:
+        async with self._db.unscoped() as connection:
+            rows = await connection.fetch(
+                "SELECT phone_number FROM tenant_numbers WHERE tenant_id = $1 "
+                "ORDER BY phone_number",
+                tenant_id,
+            )
+        return [row["phone_number"] for row in rows]
+
+    async def resolve_number(self, number: str) -> TenantContext:
+        """The number a caller dialled, to the clinic that answers it."""
+        normalized = normalize_e164(number)
+        async with self._db.unscoped() as connection:
+            tenant_id = await connection.fetchval(
+                "SELECT tenant_id FROM tenant_numbers WHERE phone_number = $1", normalized
+            )
+        if tenant_id is None:
+            raise TenantNotFoundError(f"no clinic answers {normalized}")
+        return await self.resolve(str(tenant_id))
 
     async def all(self) -> list[TenantConfig]:
         async with self._db.unscoped() as c:

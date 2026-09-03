@@ -26,6 +26,7 @@ violate even deliberately.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, time
@@ -58,6 +59,40 @@ class OutOfHoursPolicy(StrEnum):
     TAKE_MESSAGE = "take_message"
     #: Hand off to whatever the clinic already does after hours.
     EXISTING_AFTER_HOURS = "existing_after_hours"
+
+
+#: E.164: a plus, a non-zero country code, then 6 to 14 more digits.
+_E164 = re.compile(r"^\+[1-9][0-9]{6,14}$")
+
+
+class InvalidPhoneNumber(ValueError):
+    """A number that cannot be routed, refused where it enters."""
+
+
+class NumberAlreadyClaimed(RuntimeError):
+    """Two clinics cannot share an inbound number.
+
+    Not a display bug. The number is how a call finds its tenant, so an
+    ambiguous mapping routes a caller into the wrong clinic's diary and
+    transcript — a cross-tenant PHI disclosure rather than a defect.
+    """
+
+
+def normalize_e164(raw: str) -> str:
+    """Canonicalise a number so lookup is exact.
+
+    Twilio sends E.164 already, but the operator console does not: a clinic
+    types their number the way it appears on their door. Normalising on the way
+    in means the routing table holds one representation, and a lookup is an
+    equality test rather than a set of variants nobody enumerated.
+    """
+    stripped = re.sub(r"[\s()\-.]", "", raw.strip())
+    if not _E164.match(stripped):
+        raise InvalidPhoneNumber(
+            f"{raw!r} is not a routable E.164 number. Expected a leading '+', a "
+            "country code, and 7 to 15 digits in total."
+        )
+    return stripped
 
 
 class TenantNotFoundError(KeyError):
@@ -192,6 +227,10 @@ class TenantStore:
 
     def __init__(self) -> None:
         self._configs: dict[str, TenantConfig] = {}
+        #: Normalised inbound number -> tenant id. The routing table an
+        #: arriving call is resolved through, and the reason a number may be
+        #: claimed by only one clinic.
+        self._numbers: dict[str, str] = {}
 
     def add(self, config: TenantConfig) -> TenantConfig:
         self._configs[config.tenant_id] = config
@@ -238,6 +277,47 @@ class TenantStore:
 
     def by_region(self, region: Region) -> list[TenantConfig]:
         return [c for c in self._configs.values() if c.region is region]
+
+    # -- inbound routing -------------------------------------------------
+
+    def claim_number(self, tenant_id: str, number: str, *, label: str | None = None) -> str:
+        """Route calls to `number` to this clinic. Returns the normalised form.
+
+        Refuses a number another clinic already holds rather than reassigning
+        it: silently moving a live number would send a clinic's callers to
+        somebody else's agent, and the operator who typed it would see success.
+        """
+        self.get(tenant_id)  # Raises if the tenant does not exist.
+        normalized = normalize_e164(number)
+        owner = self._numbers.get(normalized)
+        if owner is not None and owner != tenant_id:
+            raise NumberAlreadyClaimed(
+                f"{normalized} is already routed to tenant {owner!r}. Release it "
+                "there before claiming it here."
+            )
+        self._numbers[normalized] = tenant_id
+        del label  # Recorded in Postgres; the in-memory store has no use for it.
+        return normalized
+
+    def release_number(self, number: str) -> bool:
+        return self._numbers.pop(normalize_e164(number), None) is not None
+
+    def numbers(self, tenant_id: str) -> list[str]:
+        return sorted(n for n, owner in self._numbers.items() if owner == tenant_id)
+
+    def resolve_number(self, number: str) -> TenantContext:
+        """The number a caller dialled, to the clinic that answers it.
+
+        The entry point for every inbound call, and the first place a call is
+        bound to a tenant. An unroutable or inactive number raises rather than
+        falling back to a default clinic — answering as the wrong clinic is
+        worse than not answering.
+        """
+        normalized = normalize_e164(number)
+        tenant_id = self._numbers.get(normalized)
+        if tenant_id is None:
+            raise TenantNotFoundError(f"no clinic answers {normalized}")
+        return self.resolve(tenant_id)
 
 
 class TenantScoped(Generic[T]):

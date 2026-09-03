@@ -173,8 +173,22 @@ class VoicePipeline:
         call_id: str,
         *,
         max_turns: int = 8,
+        session: DialogSession | None = None,
     ) -> CallResult:
-        """Answer a call, converse, and return what happened."""
+        """Answer a call, converse, and return what happened.
+
+        `session` is for a server that already holds the connection — a
+        ConversationRelay socket arriving at a webhook, where the carrier dials
+        us. Without it the transport is asked to produce one.
+
+        That distinction is not a convenience. `ConversationRelayTransport.open`
+        takes the next socket off a queue, and a queue has no idea which call a
+        socket belongs to: with two calls in flight, the sockets can be handed
+        to the wrong sessions, and caller A ends up talking inside caller B's
+        tenant context. FR1.2 requires concurrent calls, so a server that knows
+        the pairing must be able to say so rather than hand its socket to a
+        queue and hope.
+        """
         providers: ProviderSet = self._registry.for_tenant(tenant)
         log = CallLogger.for_call(__name__, tenant, call_id)
         result = CallResult(
@@ -187,7 +201,8 @@ class VoicePipeline:
 
         transport = transport_for(providers)
         result.latency_observable = transport.observes_audio
-        session = await transport.open(tenant, call_id)
+        if session is None:
+            session = await transport.open(tenant, call_id)
         history: list[Utterance] = []
 
         try:
