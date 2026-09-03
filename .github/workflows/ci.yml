@@ -186,6 +186,11 @@ jobs:
         # cannot look up AZs.
         env:
           CDK_DEFAULT_ACCOUNT: "111122223333"
+          # Placeholders, so the voice half of the stack synthesises and gets
+          # checked. Neither is resolved during synthesis — no AWS call is made
+          # — and without them the gate would silently inspect only the API.
+          AIT_VOICE_DOMAIN: voice.ci.invalid
+          AIT_VOICE_CERT_ARN: arn:aws:acm:us-east-1:111122223333:certificate/ci-placeholder
         working-directory: infra
         run: python app.py
 
@@ -206,10 +211,14 @@ jobs:
         # Not a syntax check. This asserts the properties the constraint
         # register was signed off against — Object Lock in COMPLIANCE mode for
         # a year (C-R7), an erasable content bucket with an expiry (C-R8),
-        # encryption at rest, and a task role that cannot ask to delete an
-        # audit entry. A template can be perfectly valid and have lost all of
-        # them.
-        run: python scripts/check_infra.py
+        # encryption at rest, a task role that cannot ask to delete an audit
+        # entry, and for the voice service: wss only, secrets from Secrets
+        # Manager, and a load balancer that will not cut a call at 60 seconds.
+        # A template can be perfectly valid and have lost all of them.
+        #
+        # --require-voice so the run fails rather than quietly checking half
+        # the stack if the placeholders above ever go missing.
+        run: python scripts/check_infra.py --require-voice
 
   web:
     name: Web — lint, types, tests, build

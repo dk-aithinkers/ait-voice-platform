@@ -39,6 +39,19 @@ us = cdk.Environment(
     region=os.environ.get("AIT_AWS_REGION", "us-east-1"),
 )
 
+
+def _setting(context_key: str, env_var: str) -> str | None:
+    """CDK context, falling back to an environment variable.
+
+    `--context` is a CDK CLI flag, so it does not reach `python app.py`. The
+    fallback is what lets synthesis be validated without the Node CLI — which
+    is how the CI infra job runs it, and how the voice service gets checked at
+    all rather than only the half of the stack that needs no certificate.
+    """
+    value = app.node.try_get_context(context_key) or os.environ.get(env_var, "")
+    return value.strip() or None
+
+
 platform = PlatformStack(app, "AitVoice-Platform-US", region_label="us", env=us)
 
 ServiceStack(
@@ -49,7 +62,16 @@ ServiceStack(
     db_secret=platform.db_secret,
     audit_bucket=platform.audit_bucket,
     content_bucket=platform.content_bucket,
+    relay_secret=platform.relay_secret,
+    twilio_auth_token=platform.twilio_auth_token,
     image_tag=image_tag,
+    # The voice service only materialises when a certificate is supplied,
+    # because Twilio requires HTTPS for the webhook and wss:// for the relay
+    # socket. Pass both:
+    #   npx cdk deploy -c voiceDomain=voice.example.com \
+    #                  -c voiceCertificateArn=arn:aws:acm:...
+    voice_domain=_setting("voiceDomain", "AIT_VOICE_DOMAIN"),
+    voice_certificate_arn=_setting("voiceCertificateArn", "AIT_VOICE_CERT_ARN"),
     env=us,
 )
 

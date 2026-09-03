@@ -19,7 +19,7 @@ expires, and nothing writes call content to the first one.
 
 from __future__ import annotations
 
-from aws_cdk import CfnOutput, Duration, RemovalPolicy, Stack
+from aws_cdk import CfnOutput, Duration, RemovalPolicy, SecretValue, Stack
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_rds as rds
 from aws_cdk import aws_s3 as s3
@@ -120,6 +120,37 @@ class PlatformStack(Stack):
                 f"app subnet {subnet.availability_zone}",
             )
 
+        # -- voice service secrets -----------------------------------------
+        #
+        # Generated here rather than in the service stack because a rotation
+        # that invalidated every in-flight call token on each deploy would be a
+        # dropped call, and the service stack is the one that gets replaced.
+        self.relay_secret = secretsmanager.Secret(
+            self,
+            "RelayTokenSecret",
+            description=(
+                "Signs the token authorising a ConversationRelay socket. Twilio "
+                "sends no credential on that connection, so this is the only "
+                "thing standing between a public WebSocket and a tenant context."
+            ),
+            generate_secret_string=secretsmanager.SecretStringGenerator(
+                password_length=48, exclude_punctuation=True
+            ),
+        )
+
+        # A vendor credential, so it cannot be generated — it is created empty
+        # and filled from the Twilio console. The voice service refuses to start
+        # without it, which is what stops an empty placeholder reaching
+        # production quietly: with no token every webhook signature fails to
+        # validate, and a service that cannot tell Twilio from anyone else must
+        # not answer.
+        self.twilio_auth_token = secretsmanager.Secret(
+            self,
+            "TwilioAuthToken",
+            description="Twilio account auth token. Set manually; validates the webhook signature.",
+            secret_string_value=SecretValue.unsafe_plain_text("REPLACE-ME"),
+        )
+
         # -- the audit bucket: immutable, retained -------------------------
         #
         # Object Lock in COMPLIANCE mode. Not GOVERNANCE: governance mode can be
@@ -187,5 +218,7 @@ class PlatformStack(Stack):
             "AuditBucketName": self.audit_bucket.bucket_name,
             "ContentBucketName": self.content_bucket.bucket_name,
             "Region": region_label,
+            "RelaySecretArn": self.relay_secret.secret_arn,
+            "TwilioAuthTokenArn": self.twilio_auth_token.secret_arn,
         }.items():
             CfnOutput(self, name, value=value)
