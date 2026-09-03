@@ -24,6 +24,7 @@ lost Object Lock.
 
 from __future__ import annotations
 
+import argparse
 import json
 import pathlib
 import sys
@@ -36,6 +37,17 @@ SERVICE = "AitVoice-Service-US.template.json"
 
 #: C-R7. Security logs retained at least a year.
 MIN_AUDIT_RETENTION_DAYS = 365
+
+#: A ConversationRelay socket is held for the length of a call. The AWS default
+#: is 60 seconds, which would cut every conversation past a minute — and cut it
+#: mid-sentence, on a live call, with a patient on the line.
+MIN_VOICE_IDLE_TIMEOUT_SECONDS = 600
+
+#: Credentials that must arrive from Secrets Manager. A plaintext value in a
+#: task definition is readable by anyone with console access and shows up in
+#: `describe-task-definition`, which is not where a Twilio auth token or the
+#: relay signing key belongs.
+MUST_BE_SECRETS = ("AIT_DB_PASSWORD", "AIT_RELAY_TOKEN_SECRET", "TWILIO_AUTH_TOKEN")
 
 
 class Failure(Exception):
@@ -160,10 +172,113 @@ def check_task_role(service: dict) -> list[str]:
     )
 
 
-def main() -> int:
+def check_voice_service(service: dict, *, required: bool = False) -> list[str]:
+    """The carrier-facing service, when a certificate made it materialise.
+
+    Skips loudly rather than silently: a gate that quietly checks half a stack
+    reports green on the half nobody looked at.
+    """
+    task_defs = _resources(service, "AWS::ECS::TaskDefinition")
+    voice = None
+    for td in task_defs.values():
+        for container in td["Properties"]["ContainerDefinitions"]:
+            command = container.get("Command") or []
+            if any("voice_main" in str(part) for part in command):
+                voice = container
+    if voice is None:
+        if required:
+            raise Failure(
+                "the voice service was not synthesised, so none of its checks ran.\n"
+                "  Set AIT_VOICE_DOMAIN and AIT_VOICE_CERT_ARN before synthesising. "
+                "A gate that quietly checks half a stack reports green on the half "
+                "nobody looked at."
+            )
+        return [
+            "voice service: NOT SYNTHESISED — its checks did not run. Set "
+            "AIT_VOICE_DOMAIN and AIT_VOICE_CERT_ARN to include it."
+        ]
+
+    notes = []
+    env = {e["Name"]: e.get("Value") for e in voice.get("Environment", [])}
+    secrets = {s["Name"] for s in voice.get("Secrets", [])}
+
+    relay = str(env.get("AIT_RELAY_WS_URL", ""))
+    if not relay.startswith("wss://"):
+        raise Failure(
+            f"the voice service would advertise {relay!r} in its TwiML. A plain "
+            "ws:// socket carries the transcript in clear text, and C-R2 makes "
+            "that PHI."
+        )
+
+    plaintext = [name for name in MUST_BE_SECRETS if name in env]
+    if plaintext:
+        raise Failure(
+            f"{', '.join(plaintext)} appear as plaintext environment values in the "
+            "voice task definition. They must come from Secrets Manager — a task "
+            "definition is readable by anyone with console access."
+        )
+    missing = [name for name in MUST_BE_SECRETS if name not in secrets]
+    if missing:
+        raise Failure(
+            f"the voice task definition does not source {', '.join(missing)} from Secrets Manager."
+        )
+
+    for root in ("AIT_AUDIT_ROOT", "AIT_CONTENT_ROOT"):
+        if env.get(root, None) != "":
+            raise Failure(
+                f"{root} is {env.get(root)!r} in the voice task definition. It must be "
+                "an empty string: that is what makes `build_storage` refuse rather "
+                "than fall back to the single-writer filesystem audit log, which "
+                "forks the hash chain across tasks."
+            )
+    notes.append("voice service: wss only, secrets from Secrets Manager, S3 forced")
+
+    # The listener must be HTTPS, and the balancer must not cut a call.
+    listeners = _resources(service, "AWS::ElasticLoadBalancingV2::Listener")
+    https = [n for n, v in listeners.items() if v["Properties"].get("Certificates")]
+    if not https:
+        raise Failure("no HTTPS listener with a certificate was found for the voice service.")
+
+    balancers = _resources(service, "AWS::ElasticLoadBalancingV2::LoadBalancer")
+    timeouts = {}
+    for name, lb in balancers.items():
+        attrs = {
+            a["Key"]: a.get("Value") for a in lb["Properties"].get("LoadBalancerAttributes", [])
+        }
+        if "idle_timeout.timeout_seconds" in attrs:
+            timeouts[name] = int(attrs["idle_timeout.timeout_seconds"])
+    if not timeouts:
+        raise Failure(
+            "no load balancer sets an idle timeout. The AWS default is 60 seconds, "
+            "which cuts every call that runs past a minute — mid-sentence, with a "
+            "patient on the line."
+        )
+    worst = min(timeouts.values())
+    if worst < MIN_VOICE_IDLE_TIMEOUT_SECONDS:
+        raise Failure(
+            f"the voice load balancer's idle timeout is {worst}s; a call needs at "
+            f"least {MIN_VOICE_IDLE_TIMEOUT_SECONDS}s."
+        )
+    notes.append(f"voice load balancer: HTTPS, idle timeout {worst}s")
+    return notes
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--require-voice",
+        action="store_true",
+        help="fail if the voice service was not synthesised, rather than noting it",
+    )
+    args = parser.parse_args(argv)
     try:
         platform, service = _load(PLATFORM), _load(SERVICE)
-        notes = check_buckets(platform) + check_database(platform) + check_task_role(service)
+        notes = (
+            check_buckets(platform)
+            + check_database(platform)
+            + check_task_role(service)
+            + check_voice_service(service, required=args.require_voice)
+        )
     except Failure as exc:
         print(f"\nINFRASTRUCTURE GATE FAILED\n\n  {exc}\n", file=sys.stderr)
         return 1
