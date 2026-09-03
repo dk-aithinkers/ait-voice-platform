@@ -42,6 +42,9 @@ class ServiceStack(Stack):
         relay_secret: secretsmanager.ISecret,
         twilio_auth_token: secretsmanager.ISecret,
         image_tag: str,
+        api_domain: str | None = None,
+        api_certificate_arn: str | None = None,
+        allow_insecure_api: bool = False,
         voice_domain: str | None = None,
         voice_certificate_arn: str | None = None,
         **kw,  # noqa: ANN003
@@ -116,6 +119,31 @@ class ServiceStack(Stack):
 
         image = ecs.ContainerImage.from_asset("..", file="Dockerfile", exclude=["infra/cdk.out"])
 
+        # The operator console and the clinic view serve transcripts, intake
+        # details and caller numbers. Over plaintext HTTP that is PHI crossing
+        # the public internet in clear, so a certificate is required rather than
+        # recommended.
+        #
+        # `allowInsecureApi` exists because a non-PHI environment is a real
+        # thing — a demo, a smoke test against synthetic data. It is opt-in and
+        # loud precisely so the unsafe path is a deliberate, recorded act
+        # instead of what you get by forgetting an argument.
+        if not (api_certificate_arn and api_domain) and not allow_insecure_api:
+            raise ValueError(
+                "The operator API has no certificate.\n\n"
+                "It serves transcripts and intake details, so plaintext HTTP "
+                "would put PHI on the public internet in clear. Supply\n"
+                "  -c apiDomain=console.example.com -c apiCertificateArn=arn:aws:acm:...\n"
+                "or, for an environment that will never hold real data,\n"
+                "  -c allowInsecureApi=true"
+            )
+
+        api_certificate = (
+            acm.Certificate.from_certificate_arn(self, "ApiCertificate", api_certificate_arn)
+            if api_certificate_arn and api_domain
+            else None
+        )
+
         self.service = ecs_patterns.ApplicationLoadBalancedFargateService(
             self,
             "Api",
@@ -124,6 +152,14 @@ class ServiceStack(Stack):
             memory_limit_mib=1024,
             desired_count=2,  # Two AZs, so a task loss is not an outage.
             public_load_balancer=True,
+            protocol=(
+                elb.ApplicationProtocol.HTTPS if api_certificate else elb.ApplicationProtocol.HTTP
+            ),
+            certificate=api_certificate,
+            redirect_http=bool(api_certificate),
+            # TLS 1.2 and above. The CDK default is a policy that still permits
+            # TLS 1.0, which no longer passes a serious security review.
+            ssl_policy=elb.SslPolicy.TLS12_EXT if api_certificate else None,
             task_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS),
             task_image_options=ecs_patterns.ApplicationLoadBalancedTaskImageOptions(
                 image=image,
@@ -182,14 +218,17 @@ class ServiceStack(Stack):
             self, "ServiceUrl", value=f"http://{self.service.load_balancer.load_balancer_dns_name}"
         )
         CfnOutput(self, "AppDbSecretArn", value=app_secret.secret_arn)
-        CfnOutput(
-            self,
-            "TlsWarning",
-            value=(
-                "HTTP only: no domain or ACM certificate is configured yet. "
-                "PHI must not traverse this listener until HTTPS is in front of it."
-            ),
-        )
+        if api_certificate:
+            CfnOutput(self, "ApiUrl", value=f"https://{api_domain}")
+        else:
+            CfnOutput(
+                self,
+                "ApiInsecureWarning",
+                value=(
+                    "PLAINTEXT HTTP, deployed under allowInsecureApi. This listener "
+                    "must never carry real transcripts, intake or caller numbers."
+                ),
+            )
 
     def _add_voice_service(  # noqa: PLR0913 - a wiring method; each argument is a wire
         self,
@@ -288,6 +327,7 @@ class ServiceStack(Stack):
             protocol=elb.ApplicationProtocol.HTTPS,
             certificate=certificate,
             redirect_http=True,
+            ssl_policy=elb.SslPolicy.TLS12_EXT,
             task_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS),
             task_image_options=ecs_patterns.ApplicationLoadBalancedTaskImageOptions(
                 image=image,

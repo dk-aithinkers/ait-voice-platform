@@ -49,6 +49,16 @@ MIN_VOICE_IDLE_TIMEOUT_SECONDS = 600
 #: relay signing key belongs.
 MUST_BE_SECRETS = ("AIT_DB_PASSWORD", "AIT_RELAY_TOKEN_SECRET", "TWILIO_AUTH_TOKEN")
 
+#: TLS policies that still permit 1.0 or 1.1. AWS keeps offering them and CDK
+#: still defaults to one, so the version has to be asserted rather than assumed.
+WEAK_TLS_POLICIES = (
+    "ELBSecurityPolicy-2016-08",
+    "ELBSecurityPolicy-TLS-1-0-2015-04",
+    "ELBSecurityPolicy-TLS-1-1-2017-01",
+    "ELBSecurityPolicy-FS-2018-06",
+    "ELBSecurityPolicy-FS-1-1-2019-08",
+)
+
 
 class Failure(Exception):
     pass
@@ -172,6 +182,55 @@ def check_task_role(service: dict) -> list[str]:
     )
 
 
+def check_listeners(service: dict, *, allow_insecure: bool = False) -> list[str]:
+    """Nothing public may forward plaintext, and TLS must be 1.2 or better.
+
+    A general rule rather than a per-service one, because the failure it guards
+    against is a new service being added without anyone thinking about it. The
+    operator console serves transcripts and intake details; the voice socket
+    carries the conversation itself. Both are PHI in transit, and neither has a
+    version of this that is acceptable in clear.
+
+    A redirect listener on port 80 is fine and expected — it is how a caller
+    reaching http:// gets moved to https://. What is refused is a listener that
+    *forwards* plaintext to a target.
+    """
+    listeners = _resources(service, "AWS::ElasticLoadBalancingV2::Listener")
+    if not listeners:
+        raise Failure("no load balancer listeners found; nothing is reachable.")
+
+    plaintext, weak = [], []
+    for name, listener in listeners.items():
+        props = listener["Properties"]
+        actions = props.get("DefaultActions") or [{}]
+        forwards = any(a.get("Type") == "forward" for a in actions)
+        if props.get("Protocol") == "HTTP" and forwards:
+            plaintext.append(name)
+        policy = props.get("SslPolicy")
+        if policy and policy in WEAK_TLS_POLICIES:
+            weak.append(f"{name} ({policy})")
+
+    if plaintext and not allow_insecure:
+        raise Failure(
+            f"{len(plaintext)} listener(s) forward plaintext HTTP: {', '.join(plaintext)}.\n"
+            "  These serve transcripts, intake details and caller numbers — PHI on "
+            "the public internet in clear. Supply a certificate, or deploy with "
+            "allowInsecureApi for an environment that will never hold real data."
+        )
+    if weak:
+        raise Failure(
+            f"listener(s) permit TLS below 1.2: {', '.join(weak)}. "
+            "The CDK default policy still allows TLS 1.0."
+        )
+
+    secure = [n for n, v in listeners.items() if v["Properties"].get("Protocol") == "HTTPS"]
+    if plaintext:
+        return [
+            f"listeners: {len(plaintext)} PLAINTEXT (insecure mode) — no real data may reach these"
+        ]
+    return [f"listeners: {len(secure)} HTTPS, TLS 1.2+, plaintext redirected"]
+
+
 def check_voice_service(service: dict, *, required: bool = False) -> list[str]:
     """The carrier-facing service, when a certificate made it materialise.
 
@@ -266,6 +325,11 @@ def check_voice_service(service: dict, *, required: bool = False) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--allow-insecure",
+        action="store_true",
+        help="permit plaintext listeners, for a synth of a non-PHI environment",
+    )
+    parser.add_argument(
         "--require-voice",
         action="store_true",
         help="fail if the voice service was not synthesised, rather than noting it",
@@ -277,6 +341,7 @@ def main(argv: list[str] | None = None) -> int:
             check_buckets(platform)
             + check_database(platform)
             + check_task_role(service)
+            + check_listeners(service, allow_insecure=args.allow_insecure)
             + check_voice_service(service, required=args.require_voice)
         )
     except Failure as exc:
