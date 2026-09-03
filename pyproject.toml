@@ -32,6 +32,10 @@ dev = [
 api = [
     "fastapi>=0.141.1",
     "uvicorn[standard]>=0.52.4",
+    # Twilio posts the webhook as x-www-form-urlencoded, and FastAPI's Form()
+    # needs this to parse it. A runtime dependency of the voice service, not a
+    # development convenience.
+    "python-multipart>=0.0.20",
 ]
 postgres = [
     "asyncpg>=0.31.0",
