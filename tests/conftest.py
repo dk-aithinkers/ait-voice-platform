@@ -134,3 +134,40 @@ async def owner(owner_settings: DatabaseSettings) -> AsyncIterator[Database | No
         yield db
     finally:
         await db.close()
+
+
+#: Set when a real S3 implementation (MinIO locally, a service in CI) is up.
+_S3_REQUIRED = ("AIT_S3_ENDPOINT",)
+
+
+def s3_available() -> bool:
+    return all(os.environ.get(name) for name in _S3_REQUIRED)
+
+
+requires_s3 = pytest.mark.skipif(
+    not s3_available(),
+    reason="needs a real S3 — set AIT_S3_ENDPOINT (see docs/deploying.md)",
+)
+
+
+@pytest.fixture
+def s3_client():  # noqa: ANN201 - a boto3 client, untyped without the stubs
+    """A client against a real S3 implementation, or skip.
+
+    The audit sink's guarantees are S3 semantics — conditional writes, delete
+    markers, Object Lock protecting versions rather than the current view. The
+    in-memory double models all three, but it models them the way we believe
+    they work, and that belief was wrong twice. This is the check that the
+    belief still matches the implementation.
+    """
+    if not s3_available():
+        pytest.skip("no S3 endpoint configured")
+    import boto3
+
+    return boto3.client(
+        "s3",
+        endpoint_url=os.environ["AIT_S3_ENDPOINT"],
+        aws_access_key_id=os.environ.get("AIT_S3_ACCESS_KEY", "minioadmin"),
+        aws_secret_access_key=os.environ.get("AIT_S3_SECRET_KEY", "minioadmin"),
+        region_name="us-east-1",
+    )

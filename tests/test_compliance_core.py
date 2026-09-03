@@ -177,11 +177,11 @@ class TestRetentionAndErasureCoexist:
         transcript = [PHI("I'd like to book"), PHI("Tuesday please")]
 
         await content.store(tenant, "c-1", transcript, audit=audit)
-        assert content.exists(tenant, "c-1")
+        assert await content.exists(tenant, "c-1")
 
         await content.erase(tenant, "c-1", audit=audit)
 
-        assert not content.exists(tenant, "c-1"), "content must be gone"
+        assert not await content.exists(tenant, "c-1"), "content must be gone"
         events = [row["event"] for row in await audit.read(tenant)]
         assert "content_stored" in events
         assert "content_erased" in events, "the security record must survive erasure"
@@ -385,10 +385,15 @@ class TestContentStoreWithoutAudit:
         tenant = TenantContext(tenant_id="northside", region=Region.US)
         store = ContentStore(root=tmp_path)
 
-        path = await store.store(tenant, "c-1", [PHI("hello")])
+        locator = await store.store(tenant, "c-1", [PHI("hello")])
 
-        assert path.exists()
-        assert store.exists(tenant, "c-1")
+        # A locator string, not a Path: the S3 store returns a URI, and a test
+        # that could call .exists() on the result would pass against one
+        # backend and not the other.
+        # ASYNC240 wants an async path API. This is a test asserting on a
+        # local temp file, not I/O on the request path.
+        assert Path(locator).exists()  # noqa: ASYNC240
+        assert await store.exists(tenant, "c-1")
 
     async def test_content_can_be_erased_without_an_audit_log(self, tmp_path) -> None:  # noqa: ANN001
         tenant = TenantContext(tenant_id="northside", region=Region.US)
@@ -396,7 +401,7 @@ class TestContentStoreWithoutAudit:
         await store.store(tenant, "c-1", [PHI("hello")])
 
         assert await store.erase(tenant, "c-1") is True
-        assert not store.exists(tenant, "c-1")
+        assert not await store.exists(tenant, "c-1")
 
     async def test_erasing_absent_content_reports_it_did_not_exist(self, tmp_path) -> None:  # noqa: ANN001
         """Recorded rather than swallowed: an erasure request for content that

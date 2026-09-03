@@ -38,9 +38,12 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ait_voice.core.types import PHI, TenantContext
+
+if TYPE_CHECKING:  # pragma: no cover - a cycle at runtime, fine for typing
+    from ait_voice.db.base import AuditSink
 
 
 class AuditEvent(StrEnum):
@@ -299,11 +302,17 @@ class AuditLog:
 
 
 class ContentStore:
-    """Transcripts and recordings. Erasable, separate, and never the audit log.
+    """Content on local disk. Erasable, separate, and never the audit log.
 
-    This is the other half of the resolution. Content lives here so that DPDP
-    erasure can delete it without touching the security record that must be
+    The other half of the resolution: content lives apart from the security
+    record so DPDP erasure can delete it without touching what must be
     retained — the two obligations apply to disjoint data.
+
+    Local disk, so the same caveat as :class:`AuditLog` applies — a container
+    loses this on every deploy. It is less dangerous here than for the audit
+    log, because losing erasable content is not a compliance failure in the way
+    a forked audit chain is, but it is still not persistence.
+    :class:`~ait_voice.db.s3_content.S3ContentStore` is what a deployment uses.
     """
 
     def __init__(self, root: Path | str = "var/content") -> None:
@@ -320,9 +329,14 @@ class ContentStore:
         call_id: str,
         transcript: list[PHI[str]],
         *,
-        audit: AuditLog | None = None,
-    ) -> Path:
-        """Persist a call's content, and record *that* it happened in the audit log."""
+        audit: AuditSink | None = None,
+    ) -> str:
+        """Persist a call's content, and record *that* it happened in the audit log.
+
+        Returns a locator as a string rather than a `Path`: the S3 store returns
+        a URI, and a caller that could treat the result as a filesystem path
+        would work against one backend and not the other.
+        """
         path = self._path(tenant, call_id)
         path.write_text(
             json.dumps(
@@ -344,14 +358,14 @@ class ContentStore:
                 call_id=call_id,
                 turn_count=len(transcript),
             )
-        return path
+        return str(path)
 
     async def erase(
         self,
         tenant: TenantContext,
         call_id: str,
         *,
-        audit: AuditLog | None = None,
+        audit: AuditSink | None = None,
         reason: str = "purpose_fulfilled",
     ) -> bool:
         """Delete a call's content. The audit entry of the erasure survives.
@@ -374,7 +388,7 @@ class ContentStore:
             )
         return existed
 
-    def exists(self, tenant: TenantContext, call_id: str) -> bool:
+    async def exists(self, tenant: TenantContext, call_id: str) -> bool:
         return self._path(tenant, call_id).exists()
 
 

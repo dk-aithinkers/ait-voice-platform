@@ -125,9 +125,16 @@ class PlatformStack(Stack):
         # Object Lock in COMPLIANCE mode. Not GOVERNANCE: governance mode can be
         # bypassed by a principal holding s3:BypassGovernanceRetention, which
         # makes the retention a policy rather than a property. Compliance mode
-        # cannot be bypassed by anyone, including the account root, which is the
-        # whole reason to prefer this over an append-only table whose
-        # immutability rests on a revoked grant.
+        # cannot be bypassed by anyone, including the account root.
+        #
+        # What it does and does not cover, verified against a real
+        # implementation rather than assumed: a versioned delete is refused, so
+        # nothing written can be destroyed. An UNVERSIONED delete is accepted
+        # and writes a delete marker, and a PutObject on an existing key adds a
+        # version — neither destroys anything, but both change what a naive
+        # reader sees. S3AuditLog reads the oldest version of each key for that
+        # reason, and the task role's explicit Deny in service.py is what stops
+        # either being attempted.
         #
         # OBJECT LOCK CANNOT BE ENABLED AFTER CREATION. If this bucket is ever
         # replaced, the replacement must be created with it on from the start.

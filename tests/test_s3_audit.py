@@ -21,7 +21,6 @@ concurrency protocol, which is the part with the subtle bug in it.
 from __future__ import annotations
 
 import asyncio
-import json
 from typing import Any
 
 import pytest
@@ -34,62 +33,10 @@ from ait_voice.db.s3_audit import (
     AuditWriteContention,
     S3AuditLog,
 )
+from tests.s3_double import FakeS3
 
 NORTH = TenantContext(tenant_id="northside", region=Region.US)
 PARK = TenantContext(tenant_id="parkclinic", region=Region.INDIA)
-
-
-class PreconditionFailed(Exception):
-    """Shaped like botocore's ClientError for a 412, because that is what is caught."""
-
-    def __init__(self) -> None:
-        super().__init__("At least one of the pre-conditions you specified did not hold")
-        self.response = {
-            "Error": {"Code": "PreconditionFailed"},
-            "ResponseMetadata": {"HTTPStatusCode": 412},
-        }
-
-
-class FakeS3:
-    """The three operations the sink uses, with real conditional-write semantics."""
-
-    def __init__(self, *, page_size: int = 1000) -> None:
-        self.objects: dict[str, bytes] = {}
-        self.page_size = page_size
-        self.rejected = 0
-
-    def put_object(self, **kw: Any) -> dict[str, Any]:
-        key = kw["Key"]
-        if kw.get("IfNoneMatch") == "*" and key in self.objects:
-            self.rejected += 1
-            raise PreconditionFailed()
-        self.objects[key] = kw["Body"]
-        return {}
-
-    def get_object(self, **kw: Any) -> dict[str, Any]:
-        class _Body:
-            def __init__(self, data: bytes) -> None:
-                self._data = data
-
-            def read(self) -> bytes:
-                return self._data
-
-        return {"Body": _Body(self.objects[kw["Key"]])}
-
-    def list_objects_v2(self, **kw: Any) -> dict[str, Any]:
-        keys = sorted(k for k in self.objects if k.startswith(kw.get("Prefix", "")))
-        start = 0
-        if token := kw.get("ContinuationToken"):
-            start = keys.index(token)
-        page = keys[start : start + self.page_size]
-        truncated = start + self.page_size < len(keys)
-        out: dict[str, Any] = {
-            "Contents": [{"Key": k} for k in page],
-            "IsTruncated": truncated,
-        }
-        if truncated:
-            out["NextContinuationToken"] = keys[start + self.page_size]
-        return out
 
 
 def _sink(s3: FakeS3) -> S3AuditLog:
@@ -129,29 +76,56 @@ class TestTheChain:
         assert len(await sink.read(PARK)) == 1
         assert (await sink.read(PARK))[0]["previous_hash"] is None
 
-    async def test_a_tampered_entry_fails_verification(self) -> None:
-        """Object Lock is what stops this in production; verify is the detector."""
+    async def test_an_overwrite_is_both_ineffective_and_detected(self) -> None:
+        """Object Lock permits a *new version*; it protects the old one.
+
+        So an overwrite is accepted by S3 and must fail in two ways here: `read`
+        keeps returning what was originally written, and `verify` reports the
+        attempt. Found by running against a real implementation — the earlier
+        double had no versions and could not express this at all.
+        """
         s3 = FakeS3()
         sink = _sink(s3)
         await sink.record(NORTH, AuditEvent.CALL_STARTED, call_id="c-1")
         await sink.record(NORTH, AuditEvent.CALL_ENDED, call_id="c-1")
 
         key = sorted(s3.objects)[0]
-        row = json.loads(s3.objects[key])
-        row["event"] = "content_erased"
-        s3.objects[key] = json.dumps(row).encode()
+        s3.put_object(Bucket="ait-audit", Key=key, Body=b'{"event":"tampered"}')
 
+        rows = await sink.read(NORTH)
+        assert rows[0]["event"] == AuditEvent.CALL_STARTED, "read followed the tampered version"
+        assert await sink.overwritten_keys(NORTH) == [key]
         assert await sink.verify(NORTH) is False
 
-    async def test_a_removed_entry_fails_verification(self) -> None:
+    async def test_a_delete_marker_hides_nothing(self) -> None:
+        """An unversioned delete is accepted by S3 and writes a marker.
+
+        `list_objects_v2` then stops returning the entry while the data sits
+        retained underneath — which is why the read path lists *versions*. A
+        sink that read current objects would silently lose an entry here.
+        """
         s3 = FakeS3()
         sink = _sink(s3)
         for i in range(3):
             await sink.record(NORTH, AuditEvent.CALL_STARTED, call_id=f"c-{i}")
 
-        del s3.objects[sorted(s3.objects)[1]]
+        hidden = sorted(s3.objects)[1]
+        s3.delete_object(Bucket="ait-audit", Key=hidden)
 
-        assert await sink.verify(NORTH) is False
+        assert hidden not in s3.objects, "the double did not model the delete marker"
+        assert len(await sink.read(NORTH)) == 3, "an entry was lost to a delete marker"
+        assert await sink.verify(NORTH) is True
+
+    async def test_a_versioned_delete_is_refused(self) -> None:
+        """The one thing Object Lock genuinely prevents: destroying the data."""
+        s3 = FakeS3()
+        sink = _sink(s3)
+        await sink.record(NORTH, AuditEvent.CALL_STARTED, call_id="c-1")
+        key = sorted(s3.objects)[0]
+        version = s3.versions[key][0][0]
+
+        with pytest.raises(Exception, match="pre-conditions"):
+            s3.delete_object(Bucket="ait-audit", Key=key, VersionId=version)
 
 
 class TestConcurrentWriters:

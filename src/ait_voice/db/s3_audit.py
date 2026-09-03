@@ -4,9 +4,10 @@
 infrastructure* with separate IaC-defined retention, "machine-checkable rather
 than memorized", because C-R7 (retain security logs a year) and C-R8 (erase
 personal data when its purpose ends) only both hold if they apply to disjoint
-data. A bucket under Object Lock, holding PHI-free entries, is that separation
-made real: AWS refuses to delete or overwrite an object before its retention
-expires, whoever asks and whatever their IAM policy says.
+data. A bucket under Object Lock, holding PHI-free entries, is that separation made
+real: AWS refuses to destroy a retained *version*, whoever asks and whatever
+their IAM policy says. It does not refuse a delete marker or a new version, and
+:meth:`S3AuditLog._list_originals` is where that distinction is handled.
 
 That is the difference from :class:`~ait_voice.core.audit.AuditLog`, which is
 append-only because nothing in it issues an UPDATE. This one is append-only
@@ -114,28 +115,58 @@ class S3AuditLog:
 
     # -- reads -----------------------------------------------------------
 
-    async def _list_keys(self, tenant: TenantContext) -> list[str]:
-        def _list() -> list[str]:
-            keys: list[str] = []
-            token: str | None = None
+    async def _list_originals(self, tenant: TenantContext) -> list[tuple[str, str, int]]:
+        """Every entry as (key, version_id, version_count), oldest version each.
+
+        Deliberately `list_object_versions` and not `list_objects_v2`, and this
+        is the difference between tamper-*evident* and tamper-*proof*.
+
+        Object Lock protects versions, not the current-version view. Verified
+        against a real implementation:
+
+        - `DeleteObject` with no version id is **accepted**; it writes a delete
+          marker, and the entry vanishes from `list_objects_v2` while the data
+          sits retained underneath.
+        - `PutObject` on the same key is **accepted**; it adds a version, and
+          `get_object` then serves the new bytes.
+        - `DeleteObject` *with* a version id is **refused**. Nothing that was
+          written can be destroyed.
+
+        So reading current versions would let anyone with PutObject hide or
+        replace entries — the hash chain would catch it, but only after the
+        fact. Reading the oldest version of each key reads what was actually
+        written, and listing versions means a delete marker hides nothing. The
+        sink writes each key exactly once with `IfNoneMatch`, so a key with more
+        than one version is itself evidence, which is why the count comes back.
+        """
+
+        def _list() -> list[tuple[str, str, int]]:
+            versions: dict[str, list[dict[str, Any]]] = {}
             prefix = self._tenant_prefix(tenant)
+            kwargs: dict[str, Any] = {"Bucket": self._bucket, "Prefix": prefix}
             while True:
-                kwargs: dict[str, Any] = {"Bucket": self._bucket, "Prefix": prefix}
-                if token:
-                    kwargs["ContinuationToken"] = token
-                page = self._client.list_objects_v2(**kwargs)
-                keys.extend(item["Key"] for item in page.get("Contents", []))
+                page = self._client.list_object_versions(**kwargs)
+                for item in page.get("Versions", []):
+                    versions.setdefault(item["Key"], []).append(item)
                 if not page.get("IsTruncated"):
-                    return keys
-                token = page.get("NextContinuationToken")
+                    break
+                kwargs["KeyMarker"] = page.get("NextKeyMarker")
+                kwargs["VersionIdMarker"] = page.get("NextVersionIdMarker")
 
-        # Already lexicographic from S3, but sorting makes the guarantee local
-        # rather than an assumption about the API.
-        return sorted(await asyncio.to_thread(_list))
+            out = []
+            for key, items in versions.items():
+                oldest = min(items, key=lambda v: v["LastModified"])
+                out.append((key, oldest["VersionId"], len(items)))
+            return sorted(out)
 
-    async def _get(self, key: str) -> dict[str, Any]:
+        return await asyncio.to_thread(_list)
+
+    async def _get(self, key: str, version_id: str | None = None) -> dict[str, Any]:
         def _fetch() -> dict[str, Any]:
-            body = self._client.get_object(Bucket=self._bucket, Key=key)["Body"].read()
+            kwargs: dict[str, Any] = {"Bucket": self._bucket, "Key": key}
+            if version_id:
+                kwargs["VersionId"] = version_id
+            body = self._client.get_object(**kwargs)["Body"].read()
             loaded: dict[str, Any] = json.loads(body)
             return loaded
 
@@ -143,19 +174,35 @@ class S3AuditLog:
 
     async def _discover_head(self, tenant: TenantContext) -> tuple[int, str | None]:
         """The real chain head in S3: (next sequence, hash of the last entry)."""
-        keys = await self._list_keys(tenant)
-        if not keys:
+        entries = await self._list_originals(tenant)
+        if not entries:
             return 0, None
-        last = keys[-1]
-        sequence = int(last.rsplit("/", 1)[-1].removesuffix(".json"))
-        row = await self._get(last)
+        key, version_id, _ = entries[-1]
+        sequence = int(key.rsplit("/", 1)[-1].removesuffix(".json"))
+        row = await self._get(key, version_id)
         return sequence + 1, str(row["hash"])
 
     async def read(self, tenant: TenantContext) -> list[dict[str, Any]]:
-        keys = await self._list_keys(tenant)
-        return [await self._get(key) for key in keys]
+        """Every entry as originally written, oldest version of each key."""
+        return [
+            await self._get(key, version_id)
+            for key, version_id, _ in await self._list_originals(tenant)
+        ]
+
+    async def overwritten_keys(self, tenant: TenantContext) -> list[str]:
+        """Keys carrying more than one version.
+
+        Each key is written once, with `IfNoneMatch`. A second version means
+        something tried to replace an audit entry — which Object Lock permits
+        (the original survives underneath) and which nothing else would report,
+        because :meth:`read` deliberately ignores it.
+        """
+        return [key for key, _, count in await self._list_originals(tenant) if count > 1]
 
     async def verify(self, tenant: TenantContext) -> bool:
+        """The chain, plus the fact that nobody tried to write over it."""
+        if await self.overwritten_keys(tenant):
+            return False
         return verify_chain(await self.read(tenant))
 
     # -- the write ---------------------------------------------------------

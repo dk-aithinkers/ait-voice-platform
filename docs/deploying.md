@@ -20,9 +20,28 @@ on every push rather than trusting this document.
 **Audit** — Object Lock in **COMPLIANCE** mode, 365 days, versioned. C-R7 wants
 security logs kept a year. Compliance mode rather than governance because
 governance can be bypassed by anyone holding `s3:BypassGovernanceRetention`,
-which makes immutability a policy rather than a property. The task role is also
-explicitly *denied* deletion — the bucket would refuse anyway, so this is the
-layer that does not depend on one bucket setting staying correct.
+which makes immutability a policy rather than a property.
+
+Be precise about what that buys, because it is easy to overstate and this
+document did at first. **Object Lock protects versions, not the
+current-version view.** Verified against a real implementation:
+
+| Operation | S3's answer |
+|---|---|
+| `DeleteObject` with a version id | **refused** — data cannot be destroyed |
+| `DeleteObject` with no version id | accepted; a delete marker hides the key |
+| `PutObject` on an existing key | accepted; a new version is what `GetObject` then serves |
+
+Nothing written can be destroyed, but a reader following current versions could
+be shown a shortened or altered log. `S3AuditLog` therefore lists *versions* and
+reads the **oldest version of each key** — what was actually written. A delete
+marker hides nothing from it and an overwrite cannot change what it returns.
+Since each key is written exactly once with `IfNoneMatch`, a key carrying a
+second version is itself evidence, and `verify()` fails on it.
+
+The task role is additionally *denied* deletion and retention manipulation, and
+that deny does more work than it first appears: Object Lock does **not** refuse
+a delete marker or an overwrite, so IAM is what stops either being attempted.
 
 **Content** — no Object Lock, 90-day lifecycle expiry, not versioned. C-R8 wants
 personal data erased once its purpose ends, and content under Object Lock could

@@ -43,9 +43,11 @@ from ait_voice.core.scheduling import (
 from ait_voice.core.tenancy import TenantConfig
 from ait_voice.core.types import TenantContext
 from ait_voice.db.base import (
+    AuditSink,
     CalendarRepository,
     CallRepository,
     ConsentRepository,
+    ContentSink,
     HandoffRepository,
     IntakeRepository,
     TenantRepository,
@@ -64,6 +66,7 @@ from ait_voice.db.memory import (
     InMemoryTenantStore,
 )
 from ait_voice.db.scheduling import PostgresCalendar
+from ait_voice.db.storage import build_storage
 from ait_voice.db.tenants import PostgresTenantStore
 
 
@@ -95,6 +98,8 @@ class Services:
         handoffs: HandoffRepository | None = None,
         intake: IntakeRepository | None = None,
         consent: ConsentRepository | None = None,
+        audit: AuditSink | None = None,
+        content: ContentSink | None = None,
     ) -> None:
         self.tenants = tenants or InMemoryTenantStore()
         self.calls = calls or InMemoryCallStore()
@@ -110,6 +115,16 @@ class Services:
         # before a call is placed, not over HTTP. It is held here so there is
         # one place a deployment's storage is assembled rather than two.
         self.consent = consent or InMemoryConsentLedger()
+        # The audit log and the content store. Held here so a deployment has
+        # one place its storage is assembled — until now nothing in `src/`
+        # constructed either, which is how buckets could be provisioned and
+        # stay empty while containers wrote to their own filesystems.
+        if audit is None or content is None:
+            assembled = build_storage()
+            audit = audit or assembled.audit
+            content = content or assembled.content
+        self.audit = audit
+        self.content = content
 
     @classmethod
     def from_database(
@@ -118,6 +133,8 @@ class Services:
         *,
         principals: PrincipalStore | None = None,
         booking_hours: BookingHours | None = None,
+        audit: AuditSink | None = None,
+        content: ContentSink | None = None,
     ) -> "Services":
         """The real wiring: every store backed by Postgres.
 
@@ -135,6 +152,8 @@ class Services:
             consent=PostgresConsentLedger(database),
             principals=principals,
             booking_hours=booking_hours,
+            audit=audit,
+            content=content,
         )
 
 

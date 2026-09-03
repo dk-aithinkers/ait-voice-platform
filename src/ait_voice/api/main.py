@@ -16,6 +16,7 @@ and enforcing nothing.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -23,7 +24,9 @@ from fastapi import FastAPI
 
 from ait_voice.api.app import Services, create_app
 from ait_voice.config import load_dotenv_if_present
+from ait_voice.core.logging import configure_logging
 from ait_voice.db.connection import Database
+from ait_voice.db.storage import build_storage
 
 
 def production_app() -> FastAPI:
@@ -35,7 +38,23 @@ def production_app() -> FastAPI:
     Postgres, including during collection of tests that never touch it.
     """
     load_dotenv_if_present()
+    # Not only so the line below is visible. `configure_logging` also pins the
+    # vendor SDK loggers above DEBUG, which is what stops boto3 or asyncpg
+    # logging a request body containing a transcript — a PHI control this
+    # entrypoint was not invoking at all until now.
+    configure_logging()
     database = Database()
+
+    # Assemble storage before the app exists, so a misconfigured deployment
+    # fails at construction rather than on the first call that tries to write
+    # an audit entry. `build_storage` refuses a container that has lost its
+    # bucket configuration rather than falling back to the single-writer
+    # filesystem log — see ait_voice.db.storage.
+    storage = build_storage()
+    # In the message rather than in `extra`: the default formatter drops extra
+    # fields, and this line is the only signal an operator gets about which
+    # backend is live. Safe to log — bucket names and paths, no credentials.
+    logging.getLogger(__name__).info("storage configured — %s", storage.description)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -45,4 +64,7 @@ def production_app() -> FastAPI:
         finally:
             await database.close()
 
-    return create_app(Services.from_database(database), lifespan=lifespan)
+    return create_app(
+        Services.from_database(database, audit=storage.audit, content=storage.content),
+        lifespan=lifespan,
+    )

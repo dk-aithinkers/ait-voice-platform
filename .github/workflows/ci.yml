@@ -68,6 +68,11 @@ jobs:
       AIT_DB_PASSWORD: local_dev_only
       AIT_DB_OWNER_USER: postgres
       AIT_DB_OWNER_PASSWORD: postgres
+      # Without this the S3 integration tests skip, and skipping silently is
+      # how a suite reports green while checking nothing.
+      AIT_S3_ENDPOINT: http://localhost:9000
+      AIT_S3_ACCESS_KEY: minioadmin
+      AIT_S3_SECRET_KEY: minioadmin
 
     steps:
       - uses: actions/checkout@v4
@@ -79,6 +84,23 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --all-extras --dev
+
+      - name: Start MinIO
+        # A real S3 implementation, for the same reason the Postgres tests use
+        # real Postgres: Object Lock, conditional writes and delete markers are
+        # engine semantics, and a double can only model what its author already
+        # believes. Two wrong beliefs were caught this way.
+        #
+        # A step rather than a `services:` entry because the MinIO image needs
+        # `server /data` and GitHub's service containers cannot set a command.
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            quay.io/minio/minio:latest server /data
+          for _ in $(seq 1 30); do
+            curl -sf http://localhost:9000/minio/health/live && break
+            sleep 1
+          done
 
       - name: Migrate
         # Creates the schema, the ait_app role and the RLS policies. Runs as
