@@ -68,6 +68,11 @@ jobs:
       AIT_DB_PASSWORD: local_dev_only
       AIT_DB_OWNER_USER: postgres
       AIT_DB_OWNER_PASSWORD: postgres
+      # Without this the S3 integration tests skip, and skipping silently is
+      # how a suite reports green while checking nothing.
+      AIT_S3_ENDPOINT: http://localhost:9000
+      AIT_S3_ACCESS_KEY: minioadmin
+      AIT_S3_SECRET_KEY: minioadmin
 
     steps:
       - uses: actions/checkout@v4
@@ -79,6 +84,23 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --all-extras --dev
+
+      - name: Start MinIO
+        # A real S3 implementation, for the same reason the Postgres tests use
+        # real Postgres: Object Lock, conditional writes and delete markers are
+        # engine semantics, and a double can only model what its author already
+        # believes. Two wrong beliefs were caught this way.
+        #
+        # A step rather than a `services:` entry because the MinIO image needs
+        # `server /data` and GitHub's service containers cannot set a command.
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            quay.io/minio/minio:latest server /data
+          for _ in $(seq 1 30); do
+            curl -sf http://localhost:9000/minio/health/live && break
+            sleep 1
+          done
 
       - name: Migrate
         # Creates the schema, the ait_app role and the RLS policies. Runs as
@@ -143,6 +165,51 @@ jobs:
         run: |
           uv export --no-emit-project --format requirements-txt > /tmp/requirements.txt
           uv run pip-audit --strict -r /tmp/requirements.txt
+
+  infra:
+    name: Infra — synthesise and check compliance
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install CDK
+        run: pip install -r infra/requirements.txt cfn-lint
+
+      - name: Synthesise
+        # No AWS call and no credentials: synthesis is pure template generation.
+        # The account is a placeholder because environment-agnostic stacks
+        # cannot look up AZs.
+        env:
+          CDK_DEFAULT_ACCOUNT: "111122223333"
+        working-directory: infra
+        run: python app.py
+
+      - name: Lint the templates
+        # cfn-lint exits non-zero on warnings, so the two that are artifacts of
+        # synthesising without credentials are named and tolerated rather than
+        # the exit code being ignored wholesale — an errors-only run would also
+        # hide warnings worth seeing.
+        #
+        #   W3010 hardcoded AZs: CDK emits `dummy1a`/`dummy1b` because the
+        #         placeholder account cannot look up real ones. A credentialed
+        #         synth resolves them.
+        #   W3005 duplicate DependsOn: CDK emits both a Ref and an explicit
+        #         DependsOn for the same edge.
+        run: cfn-lint --ignore-checks W3010 W3005 -- infra/cdk.out/*.template.json
+
+      - name: Compliance gate
+        # Not a syntax check. This asserts the properties the constraint
+        # register was signed off against — Object Lock in COMPLIANCE mode for
+        # a year (C-R7), an erasable content bucket with an expiry (C-R8),
+        # encryption at rest, and a task role that cannot ask to delete an
+        # audit entry. A template can be perfectly valid and have lost all of
+        # them.
+        run: python scripts/check_infra.py
 
   web:
     name: Web — lint, types, tests, build

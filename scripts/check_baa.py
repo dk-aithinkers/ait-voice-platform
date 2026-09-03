@@ -35,7 +35,23 @@ REGISTER = REPO / "compliance" / "baa-register.toml"
 #: Vendors that touch call audio, transcripts, or caller identity for a US
 #: tenant. India-market vendors are governed by DPDP rather than HIPAA and are
 #: not gated here — a separate obligation, not a lesser one.
-PHI_PATH_VENDORS = ("anthropic", "deepgram", "elevenlabs", "twilio")
+#:
+#: Two kinds of entry, and the second kind is the one that gets forgotten.
+#:
+#: The speech and telephony vendors are chosen by `config.py`, so they are
+#: visible every time someone reads the provider wiring.
+#: `tests/test_ci_gates.py` cross-checks this tuple against what `config.py` can
+#: actually select for a US tenant, so adding a provider without adding it here
+#: fails the build rather than silently leaving it ungated.
+#:
+#: `aws` is the other kind: infrastructure, selected by nothing, and therefore
+#: absent from this list until someone went looking. RDS holds transcripts and
+#: intake, CloudWatch holds whatever the logging facade emits, S3 holds the
+#: content store. C-R1 does not distinguish between a vendor that transcribes
+#: PHI and one that stores it, and a BAA does not flow down — so the gate would
+#: otherwise have reported a clean PHI path while every transcript sat in a
+#: database held under no agreement at all.
+PHI_PATH_VENDORS = ("anthropic", "aws", "deepgram", "elevenlabs", "twilio")
 
 
 def main() -> int:

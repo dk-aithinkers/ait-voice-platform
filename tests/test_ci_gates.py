@@ -171,3 +171,67 @@ class TestBAAGate:
                     f"{name} is marked signed but names no agreement"
                 )
         assert PHI_PATH_VENDORS
+
+
+class TestThePHIPathListMatchesTheCode:
+    """`PHI_PATH_VENDORS` is hand-maintained, and that is how AWS went missing.
+
+    The gate reports on a hardcoded tuple. Nothing connected it to the providers
+    `config.py` can actually select, so a vendor added to the wiring would be
+    processing US patient data with the gate still printing a clean bill. That
+    is the same shape as every other defect this file exists to catch: a check
+    that passes because it is incomplete.
+
+    So the tuple is cross-checked against the code rather than trusted.
+    """
+
+    def _us_vendors(self, monkeypatch) -> set[str]:
+        """Every vendor `config.py` selects for a US tenant with all keys set."""
+        from ait_voice.config import build_registry
+        from ait_voice.core.types import Region
+
+        for var in (
+            "ANTHROPIC_API_KEY",
+            "DEEPGRAM_API_KEY",
+            "ELEVENLABS_API_KEY",
+            "TWILIO_ACCOUNT_SID",
+            "TWILIO_AUTH_TOKEN",
+            "TWILIO_PHONE_NUMBER",
+        ):
+            monkeypatch.setenv(var, "test-value-not-a-real-credential")
+
+        _, statuses = build_registry(regions=[Region.US], baa_register={})
+        return {s.provider for s in statuses if s.real}
+
+    def test_every_selectable_us_vendor_is_gated(self, monkeypatch) -> None:
+        from scripts.check_baa import PHI_PATH_VENDORS
+
+        ungated = self._us_vendors(monkeypatch) - set(PHI_PATH_VENDORS)
+
+        assert not ungated, (
+            f"config.py can route US patient data through {sorted(ungated)}, "
+            "which check_baa.py does not gate. Add them to PHI_PATH_VENDORS "
+            "and to compliance/baa-register.toml."
+        )
+
+    def test_every_gated_vendor_is_declared_in_the_register(self) -> None:
+        """The gate already enforces this at runtime; pinning it keeps the two files honest."""
+        import tomllib
+
+        from scripts.check_baa import PHI_PATH_VENDORS, REGISTER
+
+        declared = set(tomllib.loads(REGISTER.read_text()).get("vendor", {}))
+
+        assert set(PHI_PATH_VENDORS) <= declared
+
+    def test_aws_is_gated_even_though_no_provider_selects_it(self) -> None:
+        """The instance that prompted all of the above.
+
+        RDS holds transcripts and intake. C-R1 does not distinguish between a
+        vendor that transcribes PHI and one that stores it, and infrastructure
+        is invisible to the provider wiring — so nothing but this test will
+        notice if it is dropped.
+        """
+        from scripts.check_baa import PHI_PATH_VENDORS
+
+        assert "aws" in PHI_PATH_VENDORS

@@ -29,13 +29,77 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
 
+from ait_voice.core.audit import AuditEntry, AuditEvent
 from ait_voice.core.consent import Consent, ConsentPurpose
 from ait_voice.core.handoff import HandoffContext, HandoffDecision, HandoffRecord
 from ait_voice.core.intake import IntakeRecord
 from ait_voice.core.records import ActivitySummary, CallRecord, Message, Transcript
 from ait_voice.core.scheduling import Appointment, BookingHours
 from ait_voice.core.tenancy import TenantConfig
-from ait_voice.core.types import Region, TenantContext
+from ait_voice.core.types import PHI, Region, TenantContext
+
+
+@runtime_checkable
+class AuditSink(Protocol):
+    """The immutable security record — C-R7, and the P3 audit requirement.
+
+    Two implementations with genuinely different guarantees, which is why this
+    protocol exists rather than one class with a flag.
+    :class:`~ait_voice.core.audit.AuditLog` appends JSON lines to local disk and
+    is single-writer by construction; :class:`~ait_voice.db.s3_audit.S3AuditLog`
+    is what a deployment uses, where immutability is enforced by S3 Object Lock
+    rather than by our own good intentions.
+
+    `read` returns a list rather than yielding, because the S3 sink pages over
+    objects and cannot stream lazily without holding a connection open for the
+    life of the iteration.
+    """
+
+    async def record(
+        self,
+        tenant: TenantContext,
+        event: AuditEvent,
+        *,
+        call_id: str | None = None,
+        caller_ref: str | None = None,
+        **detail: str | int | float | bool,
+    ) -> AuditEntry: ...
+    async def read(self, tenant: TenantContext) -> list[dict[str, Any]]: ...
+    async def verify(self, tenant: TenantContext) -> bool: ...
+
+
+@runtime_checkable
+class ContentSink(Protocol):
+    """Transcripts and recordings — the erasable half, and never the audit log.
+
+    C-R8 requires personal data erased once its purpose is fulfilled, which is
+    why this is a different store with a different lifetime from
+    :class:`AuditSink`. The two obligations in `project.md` only both hold
+    because they apply to disjoint data.
+
+    :meth:`store` returns an opaque locator rather than a path. The filesystem
+    implementation returns a path and the S3 one returns a URI; a caller that
+    treats either as a filesystem path is reaching through the boundary, and
+    typing it as `str` is what stops that being convenient.
+    """
+
+    async def store(
+        self,
+        tenant: TenantContext,
+        call_id: str,
+        transcript: list[PHI[str]],
+        *,
+        audit: AuditSink | None = None,
+    ) -> str: ...
+    async def erase(
+        self,
+        tenant: TenantContext,
+        call_id: str,
+        *,
+        audit: AuditSink | None = None,
+        reason: str = "purpose_fulfilled",
+    ) -> bool: ...
+    async def exists(self, tenant: TenantContext, call_id: str) -> bool: ...
 
 
 @runtime_checkable

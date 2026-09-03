@@ -33,14 +33,17 @@ import hashlib
 import json
 import os
 import uuid
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ait_voice.core.types import PHI, TenantContext
+
+if TYPE_CHECKING:  # pragma: no cover - a cycle at runtime, fine for typing
+    from ait_voice.db.base import AuditSink
 
 
 class AuditEvent(StrEnum):
@@ -165,13 +168,59 @@ def _reject_personal_data(detail: Mapping[str, object]) -> None:
             )
 
 
-class AuditLog:
-    """The security record. Append-only, PHI-free, retained.
+def verify_chain(rows: list[dict[str, Any]]) -> bool:
+    """Check a hash chain. False means an entry was altered, removed or forked.
 
-    Backed by a JSON-lines file per tenant. That is deliberately simple for the
-    skeleton — the properties that matter (append-only, hash-chained, no
-    content) are in the entries themselves, so a later move to a real
-    append-only store changes where it is written, not what is written.
+    Module-level and storage-agnostic on purpose: the chain is a property of the
+    entries, so a sink that verified differently from another sink would be
+    asserting something about its own storage rather than about the record. Both
+    implementations call this one.
+    """
+    previous: str | None = None
+    for row in rows:
+        row = dict(row)
+        stated = row.pop("hash")
+        rebuilt = AuditEntry(
+            entry_id=row["entry_id"],
+            timestamp=row["timestamp"],
+            tenant_id=row["tenant_id"],
+            region=row["region"],
+            event=AuditEvent(row["event"]),
+            call_id=row["call_id"],
+            caller_ref=row["caller_ref"],
+            detail=row["detail"],
+            previous_hash=row["previous_hash"],
+        )
+        if rebuilt.content_hash() != stated:
+            return False
+        if row["previous_hash"] != previous:
+            return False
+        previous = stated
+    return True
+
+
+class AuditLog:
+    """The security record on local disk. Append-only, PHI-free, retained.
+
+    A JSON-lines file per tenant. Right for a laptop and for tests, and wrong
+    for a deployment — which is worth stating here rather than discovering in
+    production, because the failure is quiet in all three directions:
+
+    - the file is on a container's own disk, so a deploy loses it, taking
+      C-R7's one-year retention with it;
+    - ``_last_hash`` is a **per-process** cache, so two tasks both read the same
+      chain head and both append claiming it. The chain forks, and a forked
+      chain still verifies within each fork;
+    - the append is a bare ``open("a")`` with no lock.
+
+    So this class is single-writer by construction. :class:`S3AuditLog` is what
+    a deployment uses; the entries it writes are identical, which is the point
+    the original docstring was making — moving stores changes where an entry is
+    written, not what is in it.
+
+    Async because the deployed sink talks to S3 over the network, and a
+    blocking call there would stall the event loop mid-call. Nothing here
+    awaits anything; the shape exists so the two are interchangeable.
     """
 
     def __init__(self, root: Path | str = "var/audit") -> None:
@@ -185,7 +234,7 @@ class AuditLog:
         target.parent.mkdir(parents=True, exist_ok=True)
         return target
 
-    def record(
+    async def record(
         self,
         tenant: TenantContext,
         event: AuditEvent,
@@ -219,37 +268,27 @@ class AuditLog:
         self._last_hash[key] = entry.content_hash()
         return entry
 
-    def read(self, tenant: TenantContext) -> Iterator[dict[str, Any]]:
+    async def read(self, tenant: TenantContext) -> list[dict[str, Any]]:
+        """Every entry for a tenant, oldest first.
+
+        A list rather than an iterator because the S3 sink pages over objects
+        and cannot yield lazily without holding the connection open. Fine at
+        current volumes; a year of a busy clinic will want a bounded read, and
+        that is a change to both implementations together.
+        """
         path = self._path(tenant)
         if not path.exists():
-            return
+            return []
+        rows: list[dict[str, Any]] = []
         with path.open(encoding="utf-8") as fh:
             for line in fh:
                 if line.strip():
-                    yield json.loads(line)
+                    rows.append(json.loads(line))
+        return rows
 
-    def verify(self, tenant: TenantContext) -> bool:
+    async def verify(self, tenant: TenantContext) -> bool:
         """Check the hash chain. False means an entry was altered or removed."""
-        previous: str | None = None
-        for row in self.read(tenant):
-            stated = row.pop("hash")
-            rebuilt = AuditEntry(
-                entry_id=row["entry_id"],
-                timestamp=row["timestamp"],
-                tenant_id=row["tenant_id"],
-                region=row["region"],
-                event=AuditEvent(row["event"]),
-                call_id=row["call_id"],
-                caller_ref=row["caller_ref"],
-                detail=row["detail"],
-                previous_hash=row["previous_hash"],
-            )
-            if rebuilt.content_hash() != stated:
-                return False
-            if row["previous_hash"] != previous:
-                return False
-            previous = stated
-        return True
+        return verify_chain(await self.read(tenant))
 
     def _read_last_hash(self, path: Path) -> str:
         if not path.exists():
@@ -263,11 +302,17 @@ class AuditLog:
 
 
 class ContentStore:
-    """Transcripts and recordings. Erasable, separate, and never the audit log.
+    """Content on local disk. Erasable, separate, and never the audit log.
 
-    This is the other half of the resolution. Content lives here so that DPDP
-    erasure can delete it without touching the security record that must be
+    The other half of the resolution: content lives apart from the security
+    record so DPDP erasure can delete it without touching what must be
     retained — the two obligations apply to disjoint data.
+
+    Local disk, so the same caveat as :class:`AuditLog` applies — a container
+    loses this on every deploy. It is less dangerous here than for the audit
+    log, because losing erasable content is not a compliance failure in the way
+    a forked audit chain is, but it is still not persistence.
+    :class:`~ait_voice.db.s3_content.S3ContentStore` is what a deployment uses.
     """
 
     def __init__(self, root: Path | str = "var/content") -> None:
@@ -278,15 +323,20 @@ class ContentStore:
         target.parent.mkdir(parents=True, exist_ok=True)
         return target
 
-    def store(
+    async def store(
         self,
         tenant: TenantContext,
         call_id: str,
         transcript: list[PHI[str]],
         *,
-        audit: AuditLog | None = None,
-    ) -> Path:
-        """Persist a call's content, and record *that* it happened in the audit log."""
+        audit: AuditSink | None = None,
+    ) -> str:
+        """Persist a call's content, and record *that* it happened in the audit log.
+
+        Returns a locator as a string rather than a `Path`: the S3 store returns
+        a URI, and a caller that could treat the result as a filesystem path
+        would work against one backend and not the other.
+        """
         path = self._path(tenant, call_id)
         path.write_text(
             json.dumps(
@@ -302,20 +352,20 @@ class ContentStore:
         if audit:
             # The audit entry records that content exists and how much — never
             # what it says.
-            audit.record(
+            await audit.record(
                 tenant,
                 AuditEvent.CONTENT_STORED,
                 call_id=call_id,
                 turn_count=len(transcript),
             )
-        return path
+        return str(path)
 
-    def erase(
+    async def erase(
         self,
         tenant: TenantContext,
         call_id: str,
         *,
-        audit: AuditLog | None = None,
+        audit: AuditSink | None = None,
         reason: str = "purpose_fulfilled",
     ) -> bool:
         """Delete a call's content. The audit entry of the erasure survives.
@@ -329,7 +379,7 @@ class ContentStore:
         if existed:
             path.unlink()
         if audit:
-            audit.record(
+            await audit.record(
                 tenant,
                 AuditEvent.CONTENT_ERASED,
                 call_id=call_id,
@@ -338,7 +388,7 @@ class ContentStore:
             )
         return existed
 
-    def exists(self, tenant: TenantContext, call_id: str) -> bool:
+    async def exists(self, tenant: TenantContext, call_id: str) -> bool:
         return self._path(tenant, call_id).exists()
 
 

@@ -117,7 +117,7 @@ async def record_call(
         # The booking is its own auditable fact, separate from the call ending.
         # Times and ids only — an appointment's reason is why someone is
         # unwell, and that never reaches the security log.
-        audit.record(
+        await audit.record(
             tenant,
             AuditEvent.APPOINTMENT_BOOKED
             if appointment.status is not AppointmentStatus.CANCELLED
@@ -129,7 +129,7 @@ async def record_call(
         )
 
     if audit:
-        audit.record(
+        await audit.record(
             tenant,
             AuditEvent.CALL_ENDED,
             call_id=result.call_id,
@@ -168,7 +168,7 @@ async def take_message(
     )
     await store.add_message(tenant, message)
     if audit:
-        audit.record(
+        await audit.record(
             tenant,
             AuditEvent.MESSAGE_TAKEN,
             call_id=call_id,
