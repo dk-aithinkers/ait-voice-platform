@@ -4913,3 +4913,18 @@
 **Event**: HUMAN_TURN
 
 ---
+
+## Subagent Completed
+**Timestamp**: 2026-09-03T04:55:56Z
+**Event**: SUBAGENT_COMPLETED
+**Agent Type**: 
+**Agent ID**: aaf58af592a36110e
+**Message**: continue with the voice webhook
+
+---
+
+## Human Turn
+**Timestamp**: 2026-09-03T05:03:19Z
+**Event**: HUMAN_TURN
+
+---

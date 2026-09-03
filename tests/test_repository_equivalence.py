@@ -43,7 +43,12 @@ from ait_voice.core.scheduling import (
     Calendar,
     SlotUnavailable,
 )
-from ait_voice.core.tenancy import TenantConfig
+from ait_voice.core.tenancy import (
+    InvalidPhoneNumber,
+    NumberAlreadyClaimed,
+    TenantConfig,
+    TenantNotFoundError,
+)
 from ait_voice.core.types import PHI, Region
 from ait_voice.db.calls import PostgresCallStore
 from ait_voice.db.connection import Database
@@ -784,6 +789,76 @@ class TestTenants:
         assert await _call(tenants, "count") == 2
         listed = await _call(tenants, "all")
         assert sorted(c.tenant_id for c in listed) == ["northside", "parkclinic"]
+
+    async def test_a_number_routes_to_its_clinic(self, tenants: Any) -> None:  # noqa: ANN401
+        """The lookup every inbound call starts with."""
+        await _call(tenants, "add", NORTH_CONFIG)
+
+        claimed = await _call(tenants, "claim_number", "northside", "+1 555 123 4567")
+
+        assert claimed == "+15551234567", "the number was not normalised on the way in"
+        context = await _call(tenants, "resolve_number", "+15551234567")
+        assert context.tenant_id == "northside"
+
+    async def test_an_unrouted_number_is_refused_not_defaulted(self, tenants: Any) -> None:  # noqa: ANN401
+        """Answering as the wrong clinic is worse than not answering."""
+        await _call(tenants, "add", NORTH_CONFIG)
+
+        with pytest.raises(TenantNotFoundError):
+            await _call(tenants, "resolve_number", "+15550000000")
+
+    async def test_two_clinics_cannot_hold_one_number(self, tenants: Any) -> None:  # noqa: ANN401
+        """Not a display bug: an ambiguous mapping routes a caller into the
+        wrong clinic's diary and transcript."""
+        await _call(tenants, "add", NORTH_CONFIG)
+        await _call(tenants, "add", PARK_CONFIG)
+        await _call(tenants, "claim_number", "northside", "+15551234567")
+
+        with pytest.raises(NumberAlreadyClaimed):
+            await _call(tenants, "claim_number", "parkclinic", "+15551234567")
+
+        assert (await _call(tenants, "resolve_number", "+15551234567")).tenant_id == "northside"
+
+    async def test_reclaiming_your_own_number_is_idempotent(self, tenants: Any) -> None:  # noqa: ANN401
+        await _call(tenants, "add", NORTH_CONFIG)
+        await _call(tenants, "claim_number", "northside", "+15551234567")
+
+        assert await _call(tenants, "claim_number", "northside", "+15551234567")
+        assert await _call(tenants, "numbers", "northside") == ["+15551234567"]
+
+    async def test_a_clinic_may_hold_several(self, tenants: Any) -> None:  # noqa: ANN401
+        """A main line, an after-hours line, a number ported from an old system."""
+        await _call(tenants, "add", NORTH_CONFIG)
+        await _call(tenants, "claim_number", "northside", "+15551234567")
+        await _call(tenants, "claim_number", "northside", "+15559876543")
+
+        assert await _call(tenants, "numbers", "northside") == [
+            "+15551234567",
+            "+15559876543",
+        ]
+
+    async def test_releasing_reports_whether_anything_went(self, tenants: Any) -> None:  # noqa: ANN401
+        await _call(tenants, "add", NORTH_CONFIG)
+        await _call(tenants, "claim_number", "northside", "+15551234567")
+
+        assert await _call(tenants, "release_number", "+15551234567") is True
+        assert await _call(tenants, "release_number", "+15551234567") is False
+
+    async def test_a_deactivated_clinic_does_not_answer(self, tenants: Any) -> None:  # noqa: ANN401
+        """Deactivation must reach the routing table, or a stopped clinic
+        keeps taking calls."""
+        await _call(tenants, "add", NORTH_CONFIG)
+        await _call(tenants, "claim_number", "northside", "+15551234567")
+        await _call(tenants, "deactivate", "northside")
+
+        with pytest.raises(TenantNotFoundError):
+            await _call(tenants, "resolve_number", "+15551234567")
+
+    async def test_an_unroutable_number_is_refused_at_the_boundary(self, tenants: Any) -> None:  # noqa: ANN401
+        await _call(tenants, "add", NORTH_CONFIG)
+
+        with pytest.raises(InvalidPhoneNumber):
+            await _call(tenants, "claim_number", "northside", "555-1234")
 
     async def test_a_tenant_round_trips(self, tenants: Any) -> None:  # noqa: ANN401
         await _call(tenants, "add", NORTH_CONFIG)
