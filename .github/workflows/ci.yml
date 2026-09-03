@@ -191,6 +191,10 @@ jobs:
           # — and without them the gate would silently inspect only the API.
           AIT_VOICE_DOMAIN: voice.ci.invalid
           AIT_VOICE_CERT_ARN: arn:aws:acm:us-east-1:111122223333:certificate/ci-placeholder
+          # The API needs one too, or the synth is of a plaintext console and
+          # the listener check has nothing real to inspect.
+          AIT_API_DOMAIN: console.ci.invalid
+          AIT_API_CERT_ARN: arn:aws:acm:us-east-1:111122223333:certificate/ci-placeholder
         working-directory: infra
         run: python app.py
 

@@ -70,6 +70,12 @@ ServiceStack(
     # socket. Pass both:
     #   npx cdk deploy -c voiceDomain=voice.example.com \
     #                  -c voiceCertificateArn=arn:aws:acm:...
+    api_domain=_setting("apiDomain", "AIT_API_DOMAIN"),
+    api_certificate_arn=_setting("apiCertificateArn", "AIT_API_CERT_ARN"),
+    # Opt-in plaintext, for an environment that will never hold real data.
+    allow_insecure_api=bool(
+        app.node.try_get_context("allowInsecureApi") or os.environ.get("AIT_ALLOW_INSECURE_API")
+    ),
     voice_domain=_setting("voiceDomain", "AIT_VOICE_DOMAIN"),
     voice_certificate_arn=_setting("voiceCertificateArn", "AIT_VOICE_CERT_ARN"),
     env=us,

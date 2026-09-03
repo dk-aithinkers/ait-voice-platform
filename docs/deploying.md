@@ -84,10 +84,30 @@ ALTER ROLE ait_app PASSWORD '<AppDbSecretArn -> password>';
 
 ## What is deliberately not done yet
 
-**The API load balancer is still HTTP.** The voice service gets HTTPS when a
-certificate is supplied; the operator API does not yet, because no domain is
-configured for it. **PHI must not traverse that listener** — and the clinic view
-serves transcripts, so this blocks real use of the console, not just a nicety.
+**Both services now require a certificate**, and the stack refuses to synthesise
+without one:
+
+```bash
+npx cdk deploy AitVoice-Service-US \
+  -c apiDomain=console.example.com   -c apiCertificateArn=arn:aws:acm:... \
+  -c voiceDomain=voice.example.com   -c voiceCertificateArn=arn:aws:acm:...
+```
+
+The operator console and clinic view serve transcripts, intake details and
+caller numbers, so a plaintext listener puts PHI on the public internet in
+clear. There is an escape hatch for an environment that will never hold real
+data — `-c allowInsecureApi=true` — and it is opt-in and loud precisely so the
+unsafe path is a deliberate act rather than what you get by forgetting an
+argument.
+
+Both listeners pin **TLS 1.2 or better**. The CDK default policy still permits
+TLS 1.0, which is why the version is asserted rather than inherited.
+
+`scripts/check_infra.py` refuses any listener that *forwards* plaintext HTTP. A
+redirect on port 80 is expected and fine — that is how someone reaching `http://`
+gets moved to `https://`. The rule is deliberately general rather than
+per-service, because what it guards against is a new service being added without
+anyone thinking about it.
 
 **The voice service now deploys**, on its own load balancer, but only when you
 supply a certificate:
